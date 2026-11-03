@@ -1,8 +1,27 @@
-export type ProviderKind = "telegram" | "max" | "whatsapp" | "vk";
+export type ProviderKind = "telegram" | "max" | "whatsapp" | "vk" | "instagram";
 
 export interface Chat {
   id: string;
   title: string;
+}
+
+export interface MediaAttachment {
+  kind: string;
+  reference?: string;
+  mimeType?: string;
+  fileName?: string;
+  size?: number;
+}
+
+export interface MediaFile {
+  data: Uint8Array;
+  mimeType: string;
+  fileName?: string;
+}
+
+export interface MediaInput extends MediaFile {
+  kind: "photo" | "video" | "audio";
+  caption?: string;
 }
 
 export interface Message {
@@ -16,7 +35,7 @@ export interface Message {
   direction: "incoming" | "outgoing";
   text: string;
   sentAt: string;
-  attachments: { kind: string }[];
+  attachments: MediaAttachment[];
 }
 
 export interface MessagingProvider {

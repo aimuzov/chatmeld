@@ -13,14 +13,14 @@
   <a href="https://github.com/aimuzov/chatmeld/blob/main/src/index.ts"><img src="https://img.shields.io/badge/TypeScript-ESM-3178c6?logo=typescript&logoColor=white" alt="TypeScript ESM"></a>
   <a href="https://www.npmjs.com/package/@aimuzov/chatmeld"><img src="https://img.shields.io/npm/v/%40aimuzov%2Fchatmeld" alt="npm"></a>
   <a href="https://github.com/aimuzov/chatmeld/releases"><img src="https://img.shields.io/github/v/release/aimuzov/chatmeld" alt="Release"></a>
-  <img src="https://img.shields.io/badge/providers-4-8b5cf6" alt="4 providers">
+  <img src="https://img.shields.io/badge/providers-5-8b5cf6" alt="5 providers">
 </p>
 
 <h3 align="center">One API for personal messaging accounts</h3>
 
 # Chatmeld
 
-One TypeScript API for personal Telegram, MAX, WhatsApp and VK accounts. Connect accounts to your backend, authorize with QR codes, list chats, send text and receive incoming messages.
+One TypeScript API for personal Telegram, MAX, WhatsApp, VK and Instagram accounts. Connect accounts to your backend, authorize with QR codes, list chats, send text and receive incoming messages.
 
 Your project supplies users, UI, HTTP routes, message persistence and session storage. Chatmeld runs the connections; it has no database or HTTP server of its own.
 
@@ -36,12 +36,13 @@ npm install -E @aimuzov/chatmeld
 
 Every provider requires `accountId: string` and `storage: SessionStorage`. Your application assigns `accountId`; it is neither a token nor the provider user ID.
 
-| `provider`   | Additional options                                    | Runtime                               |
-| ------------ | ----------------------------------------------------- | ------------------------------------- |
-| `"telegram"` | Your application's `apiId: number`, `apiHash: string` | Node.js                               |
-| `"max"`      | `pythonCommand?: string` interpreter path             | Python >=3.12, `maxapi-python==2.5.0` |
-| `"whatsapp"` | None                                                  | Node.js                               |
-| `"vk"`       | None                                                  | Playwright Chromium                   |
+| `provider`    | Additional options                                    | Runtime                               |
+| ------------- | ----------------------------------------------------- | ------------------------------------- |
+| `"telegram"`  | Your application's `apiId: number`, `apiHash: string` | Node.js                               |
+| `"max"`       | `pythonCommand?: string` interpreter path             | Python >=3.12, `maxapi-python==2.5.0` |
+| `"whatsapp"`  | None                                                  | Node.js                               |
+| `"vk"`        | None                                                  | Playwright Chromium                   |
+| `"instagram"` | `username: string`, `pythonCommand?: string`          | Python >=3.12, `instagrapi==3.2.2`    |
 
 For VK, install Chromium on the application server:
 
@@ -74,7 +75,7 @@ const removeState = adapter.onState((state) => {
   if (state.state === "error") console.error(state.error);
 });
 const removeMessages = adapter.onMessage(async (message) => {
-  console.log(JSON.stringify(message));
+  console.log(message.messageId);
 });
 
 try {
@@ -191,19 +192,22 @@ The `connections` map lives in process memory. Restarting loses instances and pe
 
 ## API
 
-| API                                          | Result and behavior                                                                                                                                            |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createAdapter(options)`                     | Returns `MessagingAdapter`; validates options synchronously. No connection starts yet.                                                                         |
-| `adapter.provider`, `adapter.accountId`      | Read-only provider and consumer-assigned account identity.                                                                                                     |
-| `connect({ signal? }?)`                      | `Promise<void>`; restores a saved session, without starting interactive login.                                                                                 |
-| `authorize({ onEvent, signal? })`            | `Promise<void>`; QR login, optional challenges, then committed session and connected state.                                                                    |
-| `respondToChallenge({ challengeId, value })` | `void`; submits a response to a currently pending challenge on this instance; can throw synchronously.                                                         |
-| `listChats()`                                | `Promise<Chat[]>`; each chat has string `id` and `title`. Requires connection.                                                                                 |
-| `listMessages?(chatId, { limit? }?)`         | `Promise<Message[]>`; recent Telegram/VK messages, newest first. Default limit 100; valid integers 1..100. Returns `[]` for WhatsApp/MAX. Requires connection. |
-| `sendMessage(chatId, text)`                  | `Promise<{ externalId: string }>`; sends non-empty text to a string chat ID. Requires connection.                                                              |
-| `onMessage(handler)`                         | Subscribes to incoming messages; handler returns `void` or `Promise<void>`. Returns unsubscribe function.                                                      |
-| `onState(handler)`                           | Subscribes to future state changes; synchronous handler. Returns unsubscribe function.                                                                         |
-| `disconnect()`                               | `Promise<void>`; closes resources and flushes session writes, keeping saved credentials.                                                                       |
+| API                                          | Result and behavior                                                                                                                                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `createAdapter(options)`                     | Returns `MessagingAdapter`; validates options synchronously. No connection starts yet.                                                                                   |
+| `adapter.provider`, `adapter.accountId`      | Read-only provider and consumer-assigned account identity.                                                                                                               |
+| `connect({ signal? }?)`                      | `Promise<void>`; restores a saved session, without starting interactive login.                                                                                           |
+| `authorize({ onEvent, signal? })`            | `Promise<void>`; QR login, optional challenges, then committed session and connected state.                                                                              |
+| `respondToChallenge({ challengeId, value })` | `void`; submits a response to a currently pending challenge on this instance; can throw synchronously.                                                                   |
+| `listChats()`                                | `Promise<Chat[]>`; each chat has string `id` and `title`. Requires connection.                                                                                           |
+| `getAvatar({ type, id })`                    | `Promise<Avatar \| undefined>`; chat or user photo as bytes and MIME type.                                                                                               |
+| `sendMedia(chatId, media)`                   | `Promise<{ externalId: string }>`; photo, video or audio, up to 20 MiB.                                                                                                  |
+| `downloadMedia(reference)`                   | `Promise<MediaFile>`; server-side attachment reference, up to 20 MiB.                                                                                                    |
+| `listMessages?(chatId, { limit? }?)`         | `Promise<Message[]>`; recent Telegram/VK/Instagram messages, newest first. Default limit 100; valid integers 1..100. Returns `[]` for WhatsApp/MAX. Requires connection. |
+| `sendMessage(chatId, text)`                  | `Promise<{ externalId: string }>`; sends non-empty text to a string chat ID. Requires connection.                                                                        |
+| `onMessage(handler)`                         | Subscribes to incoming messages; handler returns `void` or `Promise<void>`. Returns unsubscribe function.                                                                |
+| `onState(handler)`                           | Subscribes to future state changes; synchronous handler. Returns unsubscribe function.                                                                                   |
+| `disconnect()`                               | `Promise<void>`; closes resources and flushes session writes, keeping saved credentials.                                                                                 |
 
 Do not overlap `connect()`/`authorize()` calls on one instance. Await `disconnect()` before starting again. Disconnecting during login cancels it; repeated shutdown calls are safe. Shutdown keeps the session and does not close your database.
 
@@ -248,11 +252,13 @@ Example `Message`:
 }
 ```
 
-All IDs are strings. `senderId`, `displayName` and `username` are optional; `direction` is typed as `"incoming" | "outgoing"`. `sentAt` is a timestamp string. `attachments` is an array of `{ kind: string }`, without file contents. Deduplicate by provider, account, chat and message ID.
+All IDs are strings. `senderId`, `displayName` and `username` are optional; `direction` is typed as `"incoming" | "outgoing"`. `sentAt` is a timestamp string.
+
+`attachments` contains metadata and server-side download references, including `mimeType`, `fileName` and `size` when available. Fetch file bytes separately. Deduplicate by provider, account, chat and message ID.
 
 ### Recent messages
 
-Telegram and VK return recent messages, newest first. `listMessages` is optional in the public interface: use optional chaining for implementations without it. An empty array for WhatsApp/MAX does not mean the account has no history; those providers deliver incoming messages after connection.
+Telegram, VK and Instagram return recent messages, newest first. `listMessages` is optional in the public interface: use optional chaining for implementations without it. An empty array for WhatsApp/MAX does not mean the account has no history; those providers deliver incoming messages after connection.
 
 ```ts
 const recent =
@@ -263,6 +269,81 @@ for (const message of recent) {
 ```
 
 `persistIncoming` here stores a message in your database; respect `direction`, since history includes outgoing messages. Your project keeps durable history. There is no full synchronization, pagination or guaranteed gap recovery.
+
+## Instagram
+
+Install Python >=3.12 with `instagrapi==3.2.2` and pass that interpreter as `pythonCommand`. In the repository, `npm run setup:instagram` creates the environment with the optional Instagram dependency.
+
+Username is an Instagram handle without `@`. Use user-scoped `storage` from your application. Password and optional verification codes go through the existing `authorize()` / `respondToChallenge()` flow. QR login is not implemented for Instagram. Passwords are not saved in the session.
+
+```ts
+const instagram = createAdapter({
+  provider: "instagram",
+  accountId: "personal",
+  username: "your_username",
+  pythonCommand: "/app/.venv/bin/python",
+  storage,
+});
+```
+
+Instagram uses an unofficial API. Some security checkpoints require confirmation in the official application and another login attempt. Incoming messages are polled every 15 seconds from the last 20 dialogs, up to 20 messages per dialog. This is best effort; it does not recover every gap under a large burst of messages.
+
+## Avatars
+
+`getAvatar({ type: "chat" | "user", id })` returns `{ data: Uint8Array, mimeType }` or `undefined` when there is no photo. All five providers support the method. Downloads are on demand, limited to 256 KiB; Chatmeld has no avatar store.
+
+Call the method from your backend after checking account ownership. Your application exposes the returned bytes through its own route and decides how to cache them. Instagram group pictures are unavailable in the SDK and return `undefined`.
+
+```ts
+import type { AvatarTarget, MessagingAdapter } from "@aimuzov/chatmeld";
+
+export async function avatarResponse(
+  adapter: MessagingAdapter,
+  target: AvatarTarget,
+) {
+  const avatar = await adapter.getAvatar(target);
+  return avatar
+    ? new Response(new Uint8Array(avatar.data), {
+        headers: { "Content-Type": avatar.mimeType },
+      })
+    : new Response(null, { status: 404 });
+}
+```
+
+## Photos, video and audio
+
+`sendMedia(chatId, { kind, data, mimeType, fileName?, caption? })` sends one file and returns `{ externalId }`. `kind` is `"photo"`, `"video"` or `"audio"`; `data` is `Uint8Array`. Uploads and downloads are limited to 20 MiB per file. Chatmeld does not convert codecs or store files.
+
+Incoming attachments and recent history include a `reference` for downloadable media, plus available `mimeType`, `fileName` and `size`. Pass that reference to `downloadMedia(reference)` to receive `{ data, mimeType, fileName? }`. The example assumes `adapter`, `selectedChatId` and `message` come from your application.
+
+```ts
+import { readFile } from "node:fs/promises";
+
+const sent = await adapter.sendMedia(selectedChatId, {
+  kind: "photo",
+  data: new Uint8Array(await readFile("photo.jpg")),
+  mimeType: "image/jpeg",
+  fileName: "photo.jpg",
+});
+
+for (const attachment of message.attachments) {
+  if (!attachment.reference) continue;
+  const file = await adapter.downloadMedia(attachment.reference);
+  console.log(file.mimeType, file.data.byteLength);
+}
+```
+
+Keep references on the backend with your messages and verify ownership before downloading. WhatsApp references contain the original encrypted-media metadata needed for decryption; do not expose them in logs or public API responses. Your project saves downloaded files. There is no hidden message database in the library.
+
+| Provider  | Sending and download limits                                                                                                      |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Telegram  | Photo, video and audio files; captions supported. Streaming video depends on its format.                                         |
+| MAX       | Photo and video; ordinary audio is sent as a file. Download requires a URL available from the provider.                          |
+| WhatsApp  | Photo, video and audio through SDK encryption/decryption. Audio captions are unsupported.                                        |
+| VK        | Photo, video and audio sent as a document; captions supported. External video players without a direct file URL are unsupported. |
+| Instagram | JPEG/PNG/WebP photos, MP4 video and AAC in M4A/MP4 audio. No media captions. Shared posts and links are not downloadable files.  |
+
+Unsupported operations return `UNSUPPORTED_OPERATION` without retrying the send or closing the connection. Network failures are uncertain: the application decides whether to retry. Temporary Instagram upload files are removed after the operation.
 
 ## Session storage
 
@@ -352,24 +433,25 @@ const removeState = adapter.onState((state) => {
 });
 ```
 
-| Code                | Meaning                                                                                |
-| ------------------- | -------------------------------------------------------------------------------------- |
-| `INVALID_OPTIONS`   | Invalid configuration, missing handler or empty message.                               |
-| `INVALID_STATE`     | A connection is active, starting or shutting down.                                     |
-| `AUTH_REQUIRED`     | No usable session or no active connection.                                             |
-| `AUTH_CANCELLED`    | Operation cancelled by signal or shutdown.                                             |
-| `AUTH_TIMEOUT`      | Authorization exceeded three minutes.                                                  |
-| `INVALID_CHALLENGE` | Unknown, foreign, expired or already answered challenge.                               |
-| `INVALID_RESPONSE`  | Empty, over 4096 characters or failing the supplied pattern. The challenge stays open. |
-| `STORAGE_ERROR`     | Reading or committing session storage failed.                                          |
-| `PROVIDER_ERROR`    | Provider operation failed, including a connection timeout.                             |
-| `HANDLER_ERROR`     | Message, state or authorization-event handler failed.                                  |
-| `QUEUE_OVERFLOW`    | The incoming message queue reached its limit of 100.                                   |
-| `DISCONNECTED`      | Provider connection ended.                                                             |
+| Code                    | Meaning                                                                                 |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| `INVALID_OPTIONS`       | Invalid configuration, missing handler or empty message.                                |
+| `INVALID_STATE`         | A connection is active, starting or shutting down.                                      |
+| `AUTH_REQUIRED`         | No usable session or no active connection.                                              |
+| `AUTH_CANCELLED`        | Operation cancelled by signal or shutdown.                                              |
+| `AUTH_TIMEOUT`          | Authorization exceeded three minutes.                                                   |
+| `INVALID_CHALLENGE`     | Unknown, foreign, expired or already answered challenge.                                |
+| `INVALID_RESPONSE`      | Empty, over 4096 characters or failing the supplied pattern. The challenge stays open.  |
+| `STORAGE_ERROR`         | Reading or committing session storage failed.                                           |
+| `PROVIDER_ERROR`        | Provider operation failed, including a connection timeout.                              |
+| `HANDLER_ERROR`         | Message, state or authorization-event handler failed.                                   |
+| `QUEUE_OVERFLOW`        | The incoming message queue reached its limit of 100.                                    |
+| `UNSUPPORTED_OPERATION` | Unsupported format, operation or unavailable attachment; the connection remains usable. |
+| `DISCONNECTED`          | Provider connection ended.                                                              |
 
 ## Boundaries
 
-Chatmeld reads recent Telegram/VK messages but does not maintain its own message database, download media or implement reactions and read receipts. It provides neither exactly-once delivery nor a durable outbox. Retrying a send after a network failure can duplicate a message; your application decides when to retry.
+Chatmeld reads recent Telegram/VK/Instagram messages, downloads supported media and exposes avatars. Your project owns history and file storage. Reactions, read receipts, full synchronization, exactly-once delivery and a durable outbox are not implemented. The application decides whether to retry an uncertain send.
 
 ## Development and releases
 
@@ -378,6 +460,7 @@ git clone https://github.com/aimuzov/chatmeld.git
 cd chatmeld
 npm ci
 npm run setup:max
+npm run setup:instagram
 npm run setup:vk-qr
 npm run check
 npm test

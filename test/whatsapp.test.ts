@@ -97,7 +97,8 @@ test("WhatsApp keeps captions, attachment types and LID addresses", () => {
   );
   assert.equal(result?.chatId, "42@lid");
   assert.equal(result?.text, "Фото");
-  assert.deepEqual(result?.attachments, [{ kind: "photo" }]);
+  assert.equal(result?.attachments[0]?.kind, "photo");
+  assert.ok(result?.attachments[0]?.reference);
 });
 
 test("WhatsApp resolves contact names across phone and LID aliases without changing chat IDs", () => {

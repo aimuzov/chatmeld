@@ -1,8 +1,10 @@
 import { Worker } from "node:worker_threads";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import { downloadAvatar } from "../../library/avatar.js";
 import { AdapterError, type AdapterErrorCode } from "../../library/errors.js";
 import type {
+  MediaFile,
   Chat,
   DriverContext,
   Message,
@@ -53,7 +55,11 @@ export function createWhatsAppDriver(options: {
     context?.onError(error);
     void worker?.terminate();
   };
-  const request = <T>(method: string, params: unknown = {}): Promise<T> => {
+  const request = <T>(
+    method: string,
+    params: unknown = {},
+    timeout = method === "authorize" ? 125_000 : 45_000,
+  ): Promise<T> => {
     if (fault) return Promise.reject(fault);
     if (!worker) return Promise.reject(new Error("WhatsApp не подключён."));
     if (pending.size >= 100) {
@@ -65,7 +71,7 @@ export function createWhatsAppDriver(options: {
       const id = ++sequence;
       const timer = setTimeout(
         () => fail(new Error("Истекло время операции WhatsApp.")),
-        method === "authorize" ? 125_000 : 45_000,
+        timeout,
       );
       pending.set(id, {
         resolve: (value) => resolve(value as T),
@@ -172,6 +178,16 @@ export function createWhatsAppDriver(options: {
     connect: (context) => open(context, false),
     authorize: (context) => open(context, true),
     listChats: () => request<Chat[]>("chats"),
+    getAvatar: async (target) =>
+      downloadAvatar(
+        await request<string | undefined>("avatar", target),
+        ["whatsapp.net", "whatsapp.com", "fbcdn.net"],
+        context?.signal,
+      ),
+    sendMedia: (chatId, media) =>
+      request<{ externalId: string }>("sendMedia", { chatId, media }, 120_000),
+    downloadMedia: (reference) =>
+      request<MediaFile>("downloadMedia", { reference }, 120_000),
     sendMessage: (chatId, text) =>
       request<{ externalId: string }>("send", { chatId, text }),
     async disconnect() {

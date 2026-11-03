@@ -1,10 +1,22 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { AdapterError, cancelled } from "../../library/errors.js";
+import { downloadAvatar } from "../../library/avatar.js";
+import {
+  decodeMediaReference,
+  downloadMediaUrl,
+  encodeMediaReference,
+  mediaFileName,
+  validateMedia,
+} from "../../library/media.js";
 import type {
+  Avatar,
+  AvatarTarget,
   Chat,
   DriverContext,
   Message,
+  MediaInput,
+  MediaFile,
   ProviderDriver,
   SessionChange,
 } from "../../library/types.js";
@@ -112,7 +124,11 @@ class MaxDriver implements ProviderDriver {
       if (typeof value.error === "string")
         pending.reject(
           new AdapterError(
-            value.code === "AUTH_REQUIRED" ? "AUTH_REQUIRED" : "PROVIDER_ERROR",
+            value.code === "AUTH_REQUIRED"
+              ? "AUTH_REQUIRED"
+              : value.code === "UNSUPPORTED_OPERATION"
+                ? "UNSUPPORTED_OPERATION"
+                : "PROVIDER_ERROR",
             "MAX request failed",
           ),
         );
@@ -189,7 +205,28 @@ class MaxDriver implements ProviderDriver {
         () => this.fail(new Error("MAX challenge failed")),
       );
     } else if (value.event === "message") {
-      this.context?.onMessage(value.message as Message);
+      const message = value.message as Omit<Message, "attachments"> & {
+        attachments: (Message["attachments"][number] & {
+          referencePayload?: unknown;
+        })[];
+      };
+      this.context?.onMessage({
+        ...message,
+        attachments: message.attachments.map(
+          ({ referencePayload, ...attachment }) => ({
+            ...attachment,
+            ...(referencePayload
+              ? {
+                  reference: encodeMediaReference(
+                    "max",
+                    this.options.accountId,
+                    referencePayload,
+                  ),
+                }
+              : {}),
+          }),
+        ),
+      });
     } else if (value.event === "fatal")
       this.fail(new Error("MAX connection failed"));
   }
@@ -247,8 +284,54 @@ class MaxDriver implements ProviderDriver {
     return this.request("chats");
   }
 
+  async getAvatar(target: AvatarTarget): Promise<Avatar | undefined> {
+    const url = await this.request<string | null>("avatar", target);
+    return downloadAvatar(
+      url ?? undefined,
+      ["i.oneme.ru"],
+      this.context?.signal,
+    );
+  }
+
   sendMessage(chatId: string, text: string): Promise<{ externalId: string }> {
     return this.request("send", { chatId, text });
+  }
+
+  sendMedia(
+    chatId: string,
+    media: MediaInput,
+  ): Promise<{ externalId: string }> {
+    validateMedia(media);
+    return this.request(
+      "sendMedia",
+      {
+        chatId,
+        media: {
+          ...media,
+          data: Buffer.from(media.data).toString("base64"),
+          fileName: mediaFileName(media),
+        },
+      },
+      120_000,
+    );
+  }
+
+  async downloadMedia(reference: string): Promise<MediaFile> {
+    const payload = decodeMediaReference(
+      reference,
+      "max",
+      this.options.accountId,
+    );
+    const result = await this.request<{
+      url: string;
+      mimeType: string;
+      fileName?: string;
+    }>("downloadMedia", { payload });
+    return downloadMediaUrl(result.url, ["oneme.ru", "okcdn.ru", "max.ru"], {
+      mimeType: result.mimeType,
+      ...(result.fileName ? { fileName: result.fileName } : {}),
+      ...(this.context ? { signal: this.context.signal } : {}),
+    });
   }
 
   async disconnect(): Promise<void> {

@@ -1,6 +1,10 @@
 import { parentPort } from "node:worker_threads";
 import { WhatsAppLibraryRuntime } from "./library-runtime.js";
-import type { SessionChange } from "../../library/types.js";
+import type {
+  MediaInput,
+  AvatarTarget,
+  SessionChange,
+} from "../../library/types.js";
 import { AdapterError, safeError } from "../../library/errors.js";
 
 const port = parentPort!;
@@ -89,6 +93,19 @@ port.on(
             request.method === "authorize",
           );
         } else if (request.method === "chats") result = runtime!.listChats();
+        else if (request.method === "avatar")
+          result = await runtime!.avatarUrl(
+            request.params as unknown as AvatarTarget,
+          );
+        else if (request.method === "sendMedia")
+          result = await runtime!.sendMedia(
+            request.params!.chatId as string,
+            request.params!.media as MediaInput,
+          );
+        else if (request.method === "downloadMedia")
+          result = await runtime!.downloadMedia(
+            request.params!.reference as string,
+          );
         else if (request.method === "send")
           result = await runtime!.sendMessage(
             request.params!.chatId as string,

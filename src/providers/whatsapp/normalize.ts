@@ -2,8 +2,9 @@ import {
   getContentType,
   jidNormalizedUser,
   normalizeMessageContent,
-  type proto,
+  proto,
 } from "@whiskeysockets/baileys";
+import { encodeMediaReference } from "../../library/media.js";
 import type { Message } from "../../core/provider.js";
 
 export function normalizeMessage(
@@ -36,7 +37,7 @@ export function normalizeMessage(
   const media: Record<string, string> = {
     imageMessage: "photo",
     videoMessage: "video",
-    audioMessage: content.audioMessage?.ptt ? "voice" : "audio",
+    audioMessage: "audio",
     documentMessage: "document",
     stickerMessage: "sticker",
   };
@@ -45,6 +46,22 @@ export function normalizeMessage(
     (!["conversation", "extendedTextMessage"].includes(type)
       ? type
       : undefined);
+  const rawMedia =
+    content.imageMessage ??
+    content.videoMessage ??
+    content.audioMessage ??
+    content.documentMessage;
+  const mimeType = rawMedia?.mimetype ?? undefined;
+  const fileName = content.documentMessage?.fileName ?? undefined;
+  const rawSize = rawMedia?.fileLength;
+  const size = rawSize == null ? undefined : Number(rawSize.toString());
+  const reference = rawMedia
+    ? encodeMediaReference("whatsapp", accountId, {
+        message: Buffer.from(
+          proto.WebMessageInfo.encode(message).finish(),
+        ).toString("base64"),
+      })
+    : undefined;
   const timestamp = Number(message.messageTimestamp?.toString());
   if (!Number.isFinite(timestamp)) return;
   return {
@@ -57,7 +74,17 @@ export function normalizeMessage(
     direction: "incoming",
     text,
     sentAt: new Date(timestamp * 1000).toISOString(),
-    attachments: attachment ? [{ kind: attachment }] : [],
+    attachments: attachment
+      ? [
+          {
+            kind: attachment,
+            ...(reference ? { reference } : {}),
+            ...(mimeType ? { mimeType } : {}),
+            ...(fileName ? { fileName } : {}),
+            ...(Number.isSafeInteger(size) ? { size } : {}),
+          },
+        ]
+      : [],
   };
 }
 

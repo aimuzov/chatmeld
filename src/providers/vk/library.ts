@@ -7,13 +7,30 @@ import {
   type MessageContext,
 } from "vk-io";
 import type {
+  MediaInput,
+  MediaFile,
+  Avatar,
+  AvatarTarget,
   Chat,
   DriverContext,
   ProviderDriver,
 } from "../../library/types.js";
+import { downloadAvatar } from "../../library/avatar.js";
 import { readStored, writeStored } from "../../library/storage.js";
 import { AdapterError, abortable } from "../../library/errors.js";
-import { conversationChats, normalizeMessage } from "./normalize.js";
+import {
+  MAX_MEDIA_BYTES,
+  decodeMediaReference,
+  downloadMediaUrl,
+  mediaFileName,
+  validateMedia,
+} from "../../library/media.js";
+import {
+  conversationChats,
+  normalizeMessage,
+  normalizeAttachments,
+  vkDocumentMime,
+} from "./normalize.js";
 import { CancellableVkApi } from "./api.js";
 import { loginWithVkQr } from "./qr.js";
 
@@ -43,7 +60,7 @@ export function createVkDriver(options: { accountId: string }): ProviderDriver {
 }
 
 class VkDriver implements ProviderDriver {
-  private vk?: { api: API; updates: Updates };
+  private vk?: { api: API; updates: Updates; upload: Upload };
   private context?: DriverContext;
   private stop = new AbortController();
   private polling?: Promise<void>;
@@ -111,10 +128,8 @@ class VkDriver implements ProviderDriver {
         },
         () => this.stop.signal,
       );
-      this.vk = {
-        api,
-        updates: new Updates({ api, upload: new Upload({ api }) }),
-      };
+      const upload = new Upload({ api });
+      this.vk = { api, upload, updates: new Updates({ api, upload }) };
       const users = await api.users.get({});
       if (users.length !== 1 || !users[0]?.id)
         throw new AdapterError("AUTH_REQUIRED", "Для VK нужен личный аккаунт.");
@@ -184,6 +199,59 @@ class VkDriver implements ProviderDriver {
     }
   }
 
+  async getAvatar(target: AvatarTarget): Promise<Avatar | undefined> {
+    const id = Number(target.id);
+    if (
+      !/^-?\d+$/.test(target.id) ||
+      !Number.isSafeInteger(id) ||
+      id === 0 ||
+      (target.type === "user" && (id < 0 || id >= 2_000_000_000))
+    )
+      throw new AdapterError("INVALID_OPTIONS", "Некорректный ID аватара VK.");
+    await this.requireAuthorization();
+    try {
+      let url: string | undefined;
+      const api = this.vk!.api;
+      if (id >= 2_000_000_000) {
+        const page = await api.messages.getConversationsById({
+          peer_ids: [id],
+        });
+        url = page.items.find((item) => item.peer.id === id)?.chat_settings
+          ?.photo?.photo_100;
+      } else if (id < 0) {
+        const page = await api.groups.getById({
+          group_ids: [String(-id)],
+          fields: ["photo_100"],
+        });
+        url = page.groups.find((group) => group.id === -id)?.photo_100;
+      } else {
+        const users = await api.users.get({
+          user_ids: [String(id)],
+          fields: ["photo_100"],
+        });
+        url = users.find((user) => user.id === id)?.photo_100;
+      }
+      if (
+        url &&
+        /\/images\/(?:camera|community)(?:_|\.)/.test(new URL(url).pathname)
+      )
+        return undefined;
+      return await downloadAvatar(
+        url,
+        [
+          "userapi.com",
+          "vkuserphoto.ru",
+          "vkuserphoto.net",
+          "vk-cdn.net",
+          "vkuser.net",
+        ],
+        this.stop.signal,
+      );
+    } catch (error) {
+      throw vkError(error);
+    }
+  }
+
   async listMessages(chatId: string, options: { limit?: number } = {}) {
     if (!/^-?\d+$/.test(chatId) || !Number.isSafeInteger(Number(chatId)))
       throw new AdapterError("INVALID_OPTIONS", "Некорректный ID чата VK.");
@@ -216,10 +284,193 @@ class VkDriver implements ProviderDriver {
         direction: message.out ? ("outgoing" as const) : ("incoming" as const),
         text: message.text ?? "",
         sentAt: new Date(message.date * 1000).toISOString(),
-        attachments: (message.attachments ?? []).map((attachment) => ({
-          kind: attachment.type,
-        })),
+        attachments: normalizeAttachments(
+          message.attachments ?? [],
+          chatId,
+          message.conversation_message_id,
+          this.accountId,
+        ),
       }));
+    } catch (error) {
+      throw vkError(error);
+    }
+  }
+
+  async sendMedia(
+    chatId: string,
+    media: MediaInput,
+  ): Promise<{ externalId: string }> {
+    validateMedia(media);
+    const peer = Number(chatId);
+    if (!/^-?\d+$/.test(chatId) || !Number.isSafeInteger(peer) || !peer)
+      throw new AdapterError("INVALID_OPTIONS", "Некорректный ID чата VK.");
+    await this.requireAuthorization();
+    try {
+      const source = {
+        value: Buffer.from(media.data),
+        filename: mediaFileName(media),
+        contentType: media.mimeType,
+      };
+      const upload = this.vk!.upload;
+      const attachment =
+        media.kind === "photo"
+          ? await upload.messagePhoto({ peer_id: peer, source })
+          : media.kind === "video"
+            ? await upload.video({
+                source,
+                is_private: 1,
+                name: mediaFileName(media),
+              })
+            : await upload.messageDocument({
+                peer_id: peer,
+                source,
+                title: mediaFileName(media),
+              });
+      const [result] = await this.vk!.api.messages.send({
+        peer_ids: [peer],
+        random_id: getRandomId(),
+        attachment: attachment.toString(),
+        message: media.caption ?? "",
+      });
+      if (result?.error)
+        throw new APIError({ ...result.error, request_params: [] });
+      if (!result?.conversation_message_id)
+        throw new Error("SEND_NOT_CONFIRMED");
+      return { externalId: `${chatId}:${result.conversation_message_id}` };
+    } catch (error) {
+      throw vkError(error);
+    }
+  }
+
+  async downloadMedia(reference: string): Promise<MediaFile> {
+    const value = decodeMediaReference(reference, "vk", this.accountId);
+    if (
+      typeof value.chatId !== "string" ||
+      !/^-?\d+$/.test(value.chatId) ||
+      !Number.isSafeInteger(Number(value.chatId)) ||
+      !Number(value.chatId) ||
+      !Number.isSafeInteger(value.conversationMessageId) ||
+      Number(value.conversationMessageId) <= 0 ||
+      !Number.isSafeInteger(value.index) ||
+      Number(value.index) < 0
+    )
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Некорректная ссылка медиа VK.",
+      );
+    await this.requireAuthorization();
+    try {
+      const page = await this.vk!.api.messages.getByConversationMessageId({
+        peer_id: Number(value.chatId),
+        conversation_message_ids: [Number(value.conversationMessageId)],
+      });
+      const message = page.items.find(
+        (item) =>
+          item.conversation_message_id === value.conversationMessageId &&
+          item.peer_id === Number(value.chatId),
+      );
+      const attachment =
+        value.attachmentType && typeof value.attachmentId === "number"
+          ? message?.attachments?.find((item) => {
+              if (item.type !== value.attachmentType) return false;
+              const raw = (item as Record<string, unknown>)[item.type] as
+                { id?: number; owner_id?: number } | undefined;
+              return (
+                raw?.id === value.attachmentId &&
+                raw?.owner_id === value.ownerId
+              );
+            })
+          : message?.attachments?.[Number(value.index)];
+      if (!attachment)
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Сообщение или медиа VK больше недоступно.",
+        );
+      let url: string | undefined,
+        mimeType: string | undefined,
+        fileName: string | undefined;
+      if (attachment.type === "photo") {
+        const sizes = attachment.photo?.sizes ?? [];
+        url = [...sizes].sort(
+          (a, b) => b.width * b.height - a.width * a.height,
+        )[0]?.url;
+        mimeType = "image/jpeg";
+      } else if (attachment.type === "audio_message") {
+        url =
+          attachment.audio_message?.link_ogg ??
+          attachment.audio_message?.link_mp3;
+        mimeType = attachment.audio_message?.link_ogg
+          ? "audio/ogg"
+          : "audio/mpeg";
+      } else if (attachment.type === "audio") {
+        url = attachment.audio?.url;
+        mimeType = "audio/mpeg";
+      } else if (attachment.type === "doc") {
+        const doc = attachment.doc;
+        if (doc?.size && doc.size > MAX_MEDIA_BYTES)
+          throw new AdapterError(
+            "INVALID_OPTIONS",
+            "Медиа VK превышает допустимый размер.",
+          );
+        url = doc?.url;
+        mimeType = vkDocumentMime(doc?.ext);
+        fileName = doc?.title;
+        if (!mimeType)
+          throw new AdapterError(
+            "UNSUPPORTED_OPERATION",
+            "Документ VK не является поддерживаемым медиафайлом.",
+          );
+      } else if (attachment.type === "video") {
+        const video = attachment.video;
+        if (!video)
+          throw new AdapterError(
+            "UNSUPPORTED_OPERATION",
+            "Сообщение или медиа VK больше недоступно.",
+          );
+        const response = await this.vk!.api.video.get({
+          videos: [
+            `${video.owner_id}_${video.id}${video.access_key ? "_" + video.access_key : ""}`,
+          ],
+        });
+        const files = response.items[0]?.files;
+        if (files) {
+          const key = Object.keys(files)
+            .filter((key) => /^mp4_\d+$/.test(key))
+            .sort((a, b) => Number(a.slice(4)) - Number(b.slice(4)))[0];
+          url = key ? (files as Record<string, string>)[key] : undefined;
+        }
+        mimeType = "video/mp4";
+        if (!url)
+          throw new AdapterError(
+            "UNSUPPORTED_OPERATION",
+            "VK не предоставляет доступный для скачивания видеофайл.",
+          );
+      } else
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Это вложение VK не поддерживает скачивание.",
+        );
+      if (!url)
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Сообщение или медиа VK больше недоступно.",
+        );
+      const host = new URL(url).hostname;
+      const allowed = [
+        "userapi.com",
+        "vkuser.net",
+        "vkuseraudio.net",
+        "vkuseraudio.com",
+        "vkuserphoto.ru",
+        "vkuserphoto.net",
+        "vk-cdn.net",
+      ];
+      if (/^vkvd\d+\.mycdn\.me$/.test(host)) allowed.push(host);
+      return await downloadMediaUrl(url, allowed, {
+        signal: this.stop.signal,
+        mimeType,
+        fileName,
+      });
     } catch (error) {
       throw vkError(error);
     }

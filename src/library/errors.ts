@@ -10,7 +10,8 @@ export type AdapterErrorCode =
   | "PROVIDER_ERROR"
   | "HANDLER_ERROR"
   | "QUEUE_OVERFLOW"
-  | "DISCONNECTED";
+  | "DISCONNECTED"
+  | "UNSUPPORTED_OPERATION";
 
 export class AdapterError extends Error {
   constructor(

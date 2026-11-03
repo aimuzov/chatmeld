@@ -1,6 +1,22 @@
-import type { Chat, Message, ProviderKind } from "../core/provider.js";
+import type {
+  Chat,
+  Message,
+  ProviderKind,
+  MediaFile,
+  MediaInput,
+} from "../core/provider.js";
 
-export type { Chat, Message, ProviderKind };
+export type {
+  Chat,
+  Message,
+  ProviderKind,
+  MediaFile,
+  MediaInput,
+  MediaAttachment,
+} from "../core/provider.js";
+
+export type AvatarTarget = { type: "chat" | "user"; id: string };
+export type Avatar = { data: Uint8Array; mimeType: string };
 
 export type SessionChange =
   | { type: "set"; key: string; value: Uint8Array }
@@ -44,6 +60,12 @@ export interface ProviderDriver {
   connect(context: DriverContext): Promise<void>;
   authorize(context: DriverContext): Promise<void>;
   listChats(): Promise<Chat[]>;
+  getAvatar?(target: AvatarTarget): Promise<Avatar | undefined>;
+  sendMedia?(
+    chatId: string,
+    media: MediaInput,
+  ): Promise<{ externalId: string }>;
+  downloadMedia?(reference: string): Promise<MediaFile>;
   listMessages?(
     chatId: string,
     options?: { limit?: number },
@@ -60,6 +82,7 @@ export type AdapterOptions = {
   | { provider: "max"; pythonCommand?: string }
   | { provider: "whatsapp" }
   | { provider: "vk" }
+  | { provider: "instagram"; username: string; pythonCommand?: string }
 );
 
 export type AdapterState =
@@ -79,6 +102,9 @@ export interface MessagingAdapter {
   }): Promise<void>;
   respondToChallenge(response: { challengeId: string; value: string }): void;
   listChats(): Promise<Chat[]>;
+  getAvatar(target: AvatarTarget): Promise<Avatar | undefined>;
+  sendMedia(chatId: string, media: MediaInput): Promise<{ externalId: string }>;
+  downloadMedia(reference: string): Promise<MediaFile>;
   listMessages?(
     chatId: string,
     options?: { limit?: number },
