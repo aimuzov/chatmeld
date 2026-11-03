@@ -98,7 +98,7 @@ try {
 ```sh
 npm pkg set type=module
 npm install -D -E typescript @types/node
-npx tsc app.ts sqlite-storage.ts --module nodenext --target es2022 --outDir dist
+npx tsc app.ts sqlite-storage.ts --module nodenext --target es2022 --types node --outDir dist
 node dist/app.js
 ```
 
@@ -394,6 +394,8 @@ npm install -E /path/to/aimuzov-chatmeld-0.1.0.tgz
 
 Тесты проверяют хранилище, подтверждения, отмену, SDK, RPC и собранные workers без входа в реальные аккаунты. Проверка живого входа проводится отдельно с владельцем аккаунта.
 
-Выпуск настроен через семейный reusable workflow `aimuzov/.github/.github/workflows/release.yml@v1`: Release Please готовит PR версии и GitHub Release. Публикация npm использует `aimuzov/infra-mcp-kit/publish@v3`, environment `npm` и trusted publishing через OIDC.
+Выпуск настроен через семейный reusable workflow `aimuzov/.github/.github/workflows/release.yml@v1`: Release Please готовит PR версии и GitHub Release. Публикация npm использует `aimuzov/infra-mcp-kit/publish@v3` и environment `npm`.
 
-Первый пакет нужно создать отдельной bootstrap-публикацией. После этого привяжите npm trusted publisher к репозиторию и workflow, затем включите `vars.NPM_PUBLISH=true`. Само наличие workflow или бейджа не подтверждает успешную публикацию; проверяйте результат release job и страницу пакета.
+Настройте trusted publisher через OIDC либо repository secret `NPM_TOKEN` с правом публикации, затем включите `vars.NPM_PUBLISH=true`. Для привязки OIDC пакет уже должен существовать. С токеном тот же workflow может опубликовать первую версию.
+
+Успешную публикацию проверяйте по результату release job и странице пакета.
