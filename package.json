@@ -1,7 +1,6 @@
 {
-  "name": "chatmeld",
+  "name": "@aimuzov/chatmeld",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Personal-account messaging library with external session storage",
   "engines": {
@@ -49,6 +48,7 @@
   },
   "files": [
     "dist",
+    "README.ru.md",
     "python/library_bridge.py",
     "python/library_store.py",
     "python/chats.py",
@@ -75,5 +75,9 @@
     "vk",
     "qr",
     "typescript"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
 }

@@ -1,16 +1,18 @@
 <p align="center">
-	<a href="README.md"><img src="https://img.shields.io/badge/English-555?logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MCAzMCI+PGNsaXBQYXRoIGlkPSJ0Ij48cGF0aCBkPSJNMzAsMTVoMzB2MTV6djE1aC0zMHpoLTMwdi0xNXp2LTE1aDMweiIvPjwvY2xpcFBhdGg+PHBhdGggZD0iTTAsMHYzMGg2MHYtMzB6IiBmaWxsPSIjMDEyMTY5Ii8+PHBhdGggZD0iTTAsMCA2MCwzME02MCwwIDAsMzAiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSI2Ii8+PHBhdGggZD0iTTAsMCA2MCwzME02MCwwIDAsMzAiIGNsaXAtcGF0aD0idXJsKCN0KSIgc3Ryb2tlPSIjQzgxMDJFIiBzdHJva2Utd2lkdGg9IjQiLz48cGF0aCBkPSJNMzAsMHYzME0wLDE1aDYwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMTAiLz48cGF0aCBkPSJNMzAsMHYzME0wLDE1aDYwIiBzdHJva2U9IiNDODEwMkUiIHN0cm9rZS13aWR0aD0iNiIvPjwvc3ZnPg==" alt="English"></a>
+	<a href="https://github.com/aimuzov/chatmeld/blob/main/README.md"><img src="https://img.shields.io/badge/English-555?logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MCAzMCI+PGNsaXBQYXRoIGlkPSJ0Ij48cGF0aCBkPSJNMzAsMTVoMzB2MTV6djE1aC0zMHpoLTMwdi0xNXp2LTE1aDMweiIvPjwvY2xpcFBhdGg+PHBhdGggZD0iTTAsMHYzMGg2MHYtMzB6IiBmaWxsPSIjMDEyMTY5Ii8+PHBhdGggZD0iTTAsMCA2MCwzME02MCwwIDAsMzAiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSI2Ii8+PHBhdGggZD0iTTAsMCA2MCwzME02MCwwIDAsMzAiIGNsaXAtcGF0aD0idXJsKCN0KSIgc3Ryb2tlPSIjQzgxMDJFIiBzdHJva2Utd2lkdGg9IjQiLz48cGF0aCBkPSJNMzAsMHYzME0wLDE1aDYwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMTAiLz48cGF0aCBkPSJNMzAsMHYzME0wLDE1aDYwIiBzdHJva2U9IiNDODEwMkUiIHN0cm9rZS13aWR0aD0iNiIvPjwvc3ZnPg==" alt="English"></a>
 	<img src="https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-8b5cf6?logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA5IDYiPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0wIDBoOXYzSDB6Ii8+PHBhdGggZmlsbD0iIzAwMzlhNiIgZD0iTTAgMmg5djJIMHoiLz48cGF0aCBmaWxsPSIjZDUyYjFlIiBkPSJNMCA0aDl2MkgweiIvPjwvc3ZnPg==" alt="Русский">
 </p>
 
 <p align="center">
-  <img src=".github/assets/banner.jpg" alt="Chatmeld" width="100%">
+  <img src="https://raw.githubusercontent.com/aimuzov/chatmeld/main/.github/assets/banner.jpg" alt="Chatmeld" width="100%">
 </p>
 
 <p align="center">
   <a href="https://github.com/aimuzov/chatmeld/actions/workflows/check.yml"><img src="https://img.shields.io/github/actions/workflow/status/aimuzov/chatmeld/check.yml?branch=main&amp;label=check" alt="Check"></a>
-  <a href="package.json"><img src="https://img.shields.io/badge/Node.js-%3E%3D24-5fa04e?logo=nodedotjs&logoColor=white" alt="Node.js &gt;=24"></a>
-  <a href="src/index.ts"><img src="https://img.shields.io/badge/TypeScript-ESM-3178c6?logo=typescript&logoColor=white" alt="TypeScript ESM"></a>
+  <a href="https://github.com/aimuzov/chatmeld/blob/main/package.json"><img src="https://img.shields.io/badge/Node.js-%3E%3D24-5fa04e?logo=nodedotjs&logoColor=white" alt="Node.js &gt;=24"></a>
+  <a href="https://github.com/aimuzov/chatmeld/blob/main/src/index.ts"><img src="https://img.shields.io/badge/TypeScript-ESM-3178c6?logo=typescript&logoColor=white" alt="TypeScript ESM"></a>
+  <a href="https://www.npmjs.com/package/@aimuzov/chatmeld"><img src="https://img.shields.io/npm/v/%40aimuzov%2Fchatmeld" alt="npm"></a>
+  <a href="https://github.com/aimuzov/chatmeld/releases"><img src="https://img.shields.io/github/v/release/aimuzov/chatmeld" alt="Release"></a>
   <img src="https://img.shields.io/badge/providers-4-8b5cf6" alt="4 providers">
 </p>
 
@@ -18,187 +20,380 @@
 
 # Chatmeld
 
-Библиотека для личных аккаунтов Telegram, MAX, WhatsApp и VK. Её подключают к
-backend своего проекта. Она проводит QR-вход, восстанавливает соединения, возвращает
-диалоги, отправляет текст и передаёт входящие сообщения.
+Библиотека для личных аккаунтов Telegram, MAX, WhatsApp и VK. Её подключают к backend своего проекта: она проводит QR-вход, восстанавливает соединения, возвращает диалоги, отправляет текст и передаёт входящие сообщения.
 
-Интерфейс чата, HTTP API, пользователи и хранение переписки остаются в проекте.
-Сессии мессенджеров библиотека читает и обновляет через ваш `SessionStorage`. Файлы
-сессий и собственную базу переписки она не создаёт.
+Ваш проект предоставляет пользователей, интерфейс, HTTP API, базу переписки и хранилище сессий. Chatmeld управляет подключениями; собственной БД и сервера у библиотеки нет.
 
 ## Установка
 
-Нужен Node.js >=24. Пакет пока не опубликован в npm. Из каталога библиотеки соберите
-архив:
+Нужен Node.js >=24. Пакет содержит собранный ESM-код и декларации TypeScript; `tsx` потребителю не нужен.
 
 ```sh
-npm ci
-npm pack
+npm install -E @aimuzov/chatmeld
 ```
 
-В проекте-потребителе установите полученный файл:
+### Параметры провайдеров
 
-```sh
-npm install -E /path/to/chatmeld-0.1.0.tgz
-```
+Для всех вариантов обязательны `accountId: string` и `storage: SessionStorage`. `accountId` задаёт ваш проект; это не токен и не ID пользователя мессенджера.
 
-Для VK нужен Chromium из Playwright. Установите его на том же сервере, где будет
-работать библиотека:
+| `provider`   | Дополнительные параметры                                   | Окружение                             |
+| ------------ | ---------------------------------------------------------- | ------------------------------------- |
+| `"telegram"` | `apiId: number`, `apiHash: string` собственного приложения | Node.js                               |
+| `"max"`      | `pythonCommand?: string` -- путь к интерпретатору          | Python >=3.12, `maxapi-python==2.5.0` |
+| `"whatsapp"` | Нет                                                        | Node.js                               |
+| `"vk"`       | Нет                                                        | Chromium из Playwright                |
+
+Для VK установите Chromium на сервере приложения:
 
 ```sh
 npm exec playwright install chromium
 ```
 
-Для MAX нужен Python >=3.12 с `maxapi-python==2.5.0`. Создайте отдельное
-Python-окружение и передайте путь к его интерпретатору в `pythonCommand`. Файлы
-`python/pyproject.toml` и `python/uv.lock` входят в архив пакета. Остальные
-провайдеры не требуют Python. `tsx` потребителю не нужен.
+VK использует отдельный headless-браузер при входе и закрывает его после успеха, ошибки или отмены. Сообщения идут через API. MAX запускает отдельный Python-процесс; передайте интерпретатор с установленной зависимостью. В пакет входят `python/pyproject.toml` и `python/uv.lock`.
 
-## QR-вход из своего backend
+## Быстрый старт
+
+Сохраните реализацию из раздела "Хранение сессий" в `sqlite-storage.ts`, а этот пример -- в `app.ts`. Соберите TypeScript как NodeNext/ESM и запустите полученный `app.js`. Пример восстанавливает сессию, выводит диалоги и закрывает соединение. Для первого входа нужен поток авторизации из следующего раздела.
 
 ```ts
-import { createAdapter, type AuthEvent, type SessionStorage } from "chatmeld";
+import { AdapterError, createAdapter } from "@aimuzov/chatmeld";
+import { DatabaseSync } from "node:sqlite";
+import { sqliteSessionStorage } from "./sqlite-storage.js";
 
-declare const storage: SessionStorage;
-declare function publishAuthEvent(event: AuthEvent): Promise<void>;
+const db = new DatabaseSync("sessions.sqlite");
+const userId = "user-42";
+const accountId = "main";
+const provider = "whatsapp";
+const storage = sqliteSessionStorage(
+  db,
+  JSON.stringify([userId, provider, accountId]),
+);
+const adapter = createAdapter({ provider, accountId, storage });
 
-const adapter = createAdapter({
-  provider: "vk",
-  accountId: "user-42-vk-main",
-  storage,
+const removeState = adapter.onState((state) => {
+  if (state.state === "error") console.error(state.error);
+});
+const removeMessages = adapter.onMessage(async (message) => {
+  console.log(JSON.stringify(message));
 });
 
-const stop = new AbortController();
-const login = adapter.authorize({
-  signal: stop.signal,
-  onEvent: publishAuthEvent,
-});
-
-function handleUserResponse(challengeId: string, value: string) {
-  adapter.respondToChallenge({ challengeId, value });
+try {
+  await adapter.connect();
+  const chats = await adapter.listChats();
+  console.log(chats);
+} catch (error) {
+  if (error instanceof AdapterError && error.code === "AUTH_REQUIRED") {
+    console.log("Start authorization from your application");
+  } else {
+    throw error;
+  }
+} finally {
+  await adapter.disconnect();
+  removeMessages();
+  removeState();
+  db.close();
 }
-
-await login;
 ```
 
-Событие `qr` содержит строку `value` для построения QR. Новый QR заменяет
-предыдущий. У Telegram также доступен `expiresAt`. Событие `challenge` содержит
-`challengeId`, `kind` (`code` или `password`), `prompt` и, когда известно,
-`pattern`. Событие `progress` содержит `message`.
+```sh
+npm pkg set type=module
+npm install -D -E typescript @types/node
+npx tsc app.ts sqlite-storage.ts --module nodenext --target es2022 --outDir dist
+node dist/app.js
+```
 
-QR, коды и пароли передавайте только владельцу подключения.
+Для постоянного приёма сообщений оставьте экземпляр подключённым до остановки сервиса. Замените `console.log` в обработчике на надёжную запись в вашу БД.
 
-Метод `respondToChallenge` вызывается после получения соответствующего `challenge`.
-В примере вызовы показаны рядом, но в веб-приложении это разные запросы: один
-запускает вход, другой передаёт ответ пользователя. Вход длится не больше трёх
-минут. `stop.abort()` отменяет его и закрывает ресурсы этого подключения.
+## QR, подтверждение и владелец подключения
 
-Отменённый, чужой или уже обработанный `challengeId` возвращает ошибку. Неверный
-формат ответа оставляет запрос активным: пользователь может исправить ввод.
+Это код слоя приложения, а не готовые HTTP-маршруты. `storageFor` возвращает постоянное хранилище нужного пользователя и аккаунта; `sendToUser` передаёт события его клиенту через ваш транспорт. Подставляйте `userId` из проверенной серверной сессии и проверяйте доступ к `accountId` в каждом запросе.
 
-Метод `authorize()` завершается только после успешного входа и сохранения сессии. Не
-объявляйте вход успешным по исчезнувшему QR или отправленному коду. События
-авторизации не содержат сохранённых токенов или ключей сессии.
+```ts
+import type {
+  AuthEvent,
+  MessagingAdapter,
+  SessionStorage,
+} from "@aimuzov/chatmeld";
+import { createAdapter } from "@aimuzov/chatmeld";
+
+declare function storageFor(userId: string, accountId: string): SessionStorage;
+declare function sendToUser(userId: string, event: AuthEvent): Promise<void>;
+
+const connections = new Map<
+  string,
+  {
+    adapter: MessagingAdapter;
+    stop: AbortController;
+  }
+>();
+
+function connectionKey(userId: string, accountId: string) {
+  return JSON.stringify([userId, "vk", accountId]);
+}
+
+export async function authorize(userId: string, accountId: string) {
+  const key = connectionKey(userId, accountId);
+  if (connections.has(key)) throw new Error("Connection already active");
+  const adapter = createAdapter({
+    provider: "vk",
+    accountId,
+    storage: storageFor(userId, accountId),
+  });
+  const stop = new AbortController();
+  connections.set(key, { adapter, stop });
+  try {
+    await adapter.authorize({
+      signal: stop.signal,
+      onEvent: (event) => sendToUser(userId, event),
+    });
+    return adapter;
+  } catch (error) {
+    await adapter.disconnect();
+    if (connections.get(key)?.adapter === adapter) connections.delete(key);
+    throw error;
+  }
+}
+
+export function respond(
+  userId: string,
+  accountId: string,
+  response: { challengeId: string; value: string },
+) {
+  const connection = connections.get(connectionKey(userId, accountId));
+  if (!connection) throw new Error("Connection not found");
+  connection.adapter.respondToChallenge(response);
+}
+
+export async function close(userId: string, accountId: string) {
+  const key = connectionKey(userId, accountId);
+  const connection = connections.get(key);
+  if (!connection) return;
+  connection.stop.abort();
+  await connection.adapter.disconnect();
+  if (connections.get(key)?.adapter === connection.adapter)
+    connections.delete(key);
+}
+```
+
+Первый запрос запускает `authorize()`. Клиент получает `qr`, строит изображение из `value` и заменяет его при новом событии. Если пришёл `challenge`, клиент показывает `prompt` и передаёт именно полученный `challengeId` вместе с введённым `value` во второй запрос, который вызывает `respond()`.
+
+Оба запроса должны попасть в один backend-процесс и тот же экземпляр адаптера. Не создавайте новый адаптер для ответа. Успешный `authorize()` оставляет соединение активным; используйте возвращённый адаптер для диалогов, отправки и подписок. `close()` вызывается отдельно при завершении работы аккаунта.
+
+| Событие     | Поля                                                                            |
+| ----------- | ------------------------------------------------------------------------------- |
+| `qr`        | `value: string`, необязательный `expiresAt: string`                             |
+| `challenge` | `challengeId`, `kind: "code" \| "password"`, `prompt`, необязательный `pattern` |
+| `progress`  | `message: string`                                                               |
+
+Вход ограничен тремя минутами. `AbortSignal` отменяет вход; успешным он считается только после завершения Promise и записи сессии. Коды VK и пароль 2FA Telegram проходят через один API подтверждений. QR, ответы и пароли передавайте только владельцу и не сохраняйте в логах. События не содержат сохранённых токенов сессии.
+
+Карта `connections` существует в памяти процесса. После перезапуска пропадут экземпляры и незавершённые запросы, но не сохранённые сессии. Восстановите подключения через `connect()`; незавершённый вход запустите заново. В production добавьте управление жизненным циклом, маршрутизацию к владельцу подключения и очистку по завершении работы.
+
+## API
+
+| API                                          | Результат и поведение                                                                                                                                                         |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createAdapter(options)`                     | Возвращает `MessagingAdapter`; синхронно проверяет параметры. Подключение ещё не запускается.                                                                                 |
+| `adapter.provider`, `adapter.accountId`      | Доступные для чтения провайдер и заданный вашим проектом идентификатор аккаунта.                                                                                              |
+| `connect({ signal? }?)`                      | `Promise<void>`; восстанавливает сохранённую сессию без интерактивного входа.                                                                                                 |
+| `authorize({ onEvent, signal? })`            | `Promise<void>`; QR-вход, возможные запросы подтверждения, запись сессии и подключение.                                                                                       |
+| `respondToChallenge({ challengeId, value })` | `void`; отвечает на активный запрос этого экземпляра; может синхронно выбросить ошибку.                                                                                       |
+| `listChats()`                                | `Promise<Chat[]>`; каждый диалог содержит строки `id` и `title`. Нужно подключение.                                                                                           |
+| `listMessages?(chatId, { limit? }?)`         | `Promise<Message[]>`; последние сообщения Telegram/VK от новых к старым. Лимит по умолчанию 100, допустимы целые 1..100. Для WhatsApp/MAX возвращает `[]`. Нужно подключение. |
+| `sendMessage(chatId, text)`                  | `Promise<{ externalId: string }>`; отправляет непустой текст в диалог со строковым ID. Нужно подключение.                                                                     |
+| `onMessage(handler)`                         | Подписка на входящие; обработчик возвращает `void` или `Promise<void>`. Возвращает функцию отписки.                                                                           |
+| `onState(handler)`                           | Подписка на будущие смены состояния; обработчик синхронный. Возвращает функцию отписки.                                                                                       |
+| `disconnect()`                               | `Promise<void>`; закрывает ресурсы и завершает записи сессии, сохраняя сессию.                                                                                                |
+
+Не запускайте несколько `connect()`/`authorize()` на одном экземпляре. Дождитесь `disconnect()` перед новым запуском. Закрытие во время входа отменяет его; повторные вызовы `disconnect()` безопасны. Закрытие не удаляет сессию и не закрывает вашу БД.
+
+Состояния: `connecting`, `authorizing`, `connected`, `disconnected` и `error`. Тип `AdapterState` также допускает `idle`; подписка сообщает будущие изменения, без немедленного снимка. В состоянии `error` поле `error` содержит ошибку. Обработчик состояния синхронный: не передавайте ему `async`-функцию.
+
+Подписывайтесь до подключения. Сообщения без подписчиков не накапливаются. Асинхронные обработчики выполняются по очереди; лимит очереди -- 100 сообщений, включая обрабатываемое. Ошибка обработчика и переполнение закрывают подключение с `HANDLER_ERROR` или `QUEUE_OVERFLOW`. Обработка не заменяет вашу очередь и подтверждённую запись.
+
+## Диалоги и сообщения
+
+После успешного `connect()` или `authorize()` можно выбирать диалог и отправлять текст. В примере `selectedChatId` приходит от вашего клиента, а `persistOutgoing` сохраняет отправку в вашу БД.
+
+```ts
+const chats = await adapter.listChats();
+const chat = chats.find((item) => item.id === selectedChatId);
+if (!chat) throw new Error("Chat not found");
+const sent = await adapter.sendMessage(chat.id, "Hello!");
+await persistOutgoing({
+  provider: adapter.provider,
+  accountId: adapter.accountId,
+  chatId: chat.id,
+  messageId: sent.externalId,
+  text: "Hello!",
+});
+```
+
+Подписка передаёт входящие сообщения. Исходящее отображайте и сохраняйте по результату `sendMessage()` с `externalId`: собственного echo в `onMessage` ждать не нужно.
+
+Пример `Message`:
+
+```json
+{
+  "provider": "whatsapp",
+  "accountId": "main",
+  "chatId": "120363000000000000@g.us",
+  "messageId": "ABC123",
+  "senderId": "15551234567@s.whatsapp.net",
+  "displayName": "Alice",
+  "direction": "incoming",
+  "text": "Hello!",
+  "sentAt": "2026-11-03T10:00:00.000Z",
+  "attachments": []
+}
+```
+
+Все ID -- строки. Поля `senderId`, `displayName`, `username` необязательны; `direction` имеет тип `"incoming" | "outgoing"`. `sentAt` -- строка времени, `attachments` -- массив `{ kind: string }`, без содержимого файлов. Для устранения дублей используйте сочетание провайдера, аккаунта, диалога и ID сообщения.
+
+### Последние сообщения
+
+Telegram и VK возвращают последние сообщения от новых к старым. `listMessages` необязателен в публичном интерфейсе: используйте optional chaining для совместимости с реализациями без метода. Пустой массив для WhatsApp/MAX не означает отсутствие переписки; эти провайдеры передают входящие после подключения.
+
+```ts
+const recent =
+  (await adapter.listMessages?.(selectedChatId, { limit: 50 })) ?? [];
+for (const message of recent) {
+  await persistIncoming(message);
+}
+```
+
+`persistIncoming` здесь сохраняет сообщение в вашу БД; учитывайте `direction`, поскольку история включает исходящие. Постоянная история остаётся в вашем проекте. Полной синхронизации, пагинации и гарантированного восстановления пропусков нет.
 
 ## Хранение сессий
 
+Полная реализация для встроенного `node:sqlite` из [examples/sqlite-storage.ts](https://github.com/aimuzov/chatmeld/blob/main/examples/sqlite-storage.ts):
+
 ```ts
-export interface SessionStorage {
-  read(key: string): Promise<Uint8Array | undefined>;
-  writeBatch(changes: readonly SessionChange[]): Promise<void>;
+import { DatabaseSync } from "node:sqlite";
+import type { SessionStorage } from "@aimuzov/chatmeld";
+
+export function sqliteSessionStorage(
+  db: DatabaseSync,
+  scope: string,
+): SessionStorage {
+  db.exec(`CREATE TABLE IF NOT EXISTS chatmeld_sessions (
+    scope TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value BLOB NOT NULL,
+    PRIMARY KEY (scope, key)
+  )`);
+  const read = db.prepare(
+    "SELECT value FROM chatmeld_sessions WHERE scope = ? AND key = ?",
+  );
+  const write = db.prepare(
+    "INSERT INTO chatmeld_sessions (scope, key, value) VALUES (?, ?, ?) ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value",
+  );
+  const remove = db.prepare(
+    "DELETE FROM chatmeld_sessions WHERE scope = ? AND key = ?",
+  );
+  return {
+    async read(key) {
+      const row = read.get(scope, key);
+      return row ? new Uint8Array(row.value as Uint8Array) : undefined;
+    },
+    async writeBatch(changes) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        for (const change of changes) {
+          if (change.type === "set") write.run(scope, change.key, change.value);
+          else remove.run(scope, change.key);
+        }
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+  };
 }
-
-export type SessionChange =
-  | { type: "set"; key: string; value: Uint8Array }
-  | { type: "delete"; key: string };
 ```
 
-Значение `undefined` означает, что записи нет. Ошибку БД нужно выбросить, а не
-вернуть вместо неё пустую сессию. Метод `writeBatch` применяет весь набор атомарно и
-разрешает Promise после надёжной записи. Для БД используйте транзакцию.
+Область `JSON.stringify([userId, provider, accountId])` изолирует ключи пользователей, провайдеров и аккаунтов без неоднозначности разделителей. Ключи и версионированный формат значений принадлежат Chatmeld; не переименовывайте ключи и не разбирайте их содержимое.
 
-Библиотека упорядочивает записи одного подключения; WhatsApp обновляет ключи и после
-авторизации, поэтому сохранять только итог входа недостаточно.
+`read` возвращает `undefined` только при отсутствии записи. Сбой БД должен выбрасывать ошибку. Значения храните как BLOB, без текстового кодирования; возвращайте неизменённые байты `Uint8Array`. Шифрование, резервные копии и права доступа обеспечивает ваш проект.
 
-Создавайте отдельную область ключей для каждого сочетания пользователя, провайдера и
-аккаунта. Формат значений принадлежит библиотеке и версионируется. Храните байты без
-изменений. Выбор БД, шифрование и доступ к записям -- ваша сторона.
+`writeBatch` должен атомарно применить весь набор и завершиться после commit. При ошибке -- rollback и выброшенная ошибка. Не запускайте пересекающиеся транзакции на этом соединении. Библиотека упорядочивает записи одного адаптера, но не координирует все ваши экземпляры и процессы.
 
-В нескольких backend-процессах назначайте одного владельца активного подключения к
-аккаунту. Библиотека не берёт распределённую блокировку в вашей БД.
+WhatsApp обновляет параметры сессии и ключи во время работы, после QR-входа. Хранилище должно оставаться доступным весь срок подключения. При ошибке хранения адаптер останавливается: продолжать работу с несохранёнными ключами нельзя.
 
-Для примеров и тестов экспортируется `MemorySessionStorage`. Содержимое исчезает при
-завершении процесса; это не постоянное хранилище для сервера. Библиотека не
-закрывает ваше хранилище и не владеет его пулом соединений.
+Назначайте одного активного владельца аккаунта. При нескольких процессах распределённый lease, продление и передача владения -- ответственность потребителя. Встроенной блокировки нет. Жизненный цикл SQLite-соединения или пула также принадлежит вашему приложению.
 
-## Подключение и сообщения
-
-Для сохранённой сессии вызывайте `connect()`. Он восстанавливает соединение и не
-запускает QR-вход автоматически. Отсутствующая сессия возвращает
-`AdapterError` с кодом `AUTH_REQUIRED`.
-
-```ts
-import type { AdapterState, Message } from "chatmeld";
-
-declare function publishState(state: AdapterState): void;
-declare function persistIncoming(message: Message): Promise<void>;
-
-adapter.onState(publishState);
-adapter.onMessage(persistIncoming);
-
-await adapter.connect();
-const chats = await adapter.listChats();
-await adapter.sendMessage(chats[0]!.id, "Привет!");
-await adapter.disconnect();
-```
-
-Обе подписки возвращают функцию отписки. Обработчик сообщений может быть
-асинхронным. Его ошибка и переполнение очереди завершают подключение с явной
-ошибкой, а не теряют сообщения молча. Очередь ограничена сотней сообщений.
-
-Вызов `disconnect()` закрывает соединение и завершает записи сессии; сессия остаётся
-в вашем хранилище. Подключение можно восстановить тем же экземпляром. Одновременные
-`connect()` и `authorize()` на одном экземпляре запрещены.
-
-Для Telegram передайте `provider: "telegram"`, `apiId` и `apiHash` собственного
-приложения. Для MAX используйте `provider: "max"` и при необходимости
-`pythonCommand`. Для WhatsApp достаточно `provider: "whatsapp"`. Все варианты
-требуют `accountId` и `storage`.
-
-Сообщение содержит `provider`, `accountId`, `chatId`, `messageId`, `direction`,
-`text`, `sentAt`, `attachments` и доступные сведения об отправителе. Идентификаторы
-передаются строками. Для устранения дублей учитывайте провайдера, аккаунт, диалог и
-идентификатор сообщения.
-
-Подписка передаёт входящие сообщения; результат отправки своего сообщения сохраните
-по ответу `sendMessage()`, который содержит `externalId`.
-
-История, файлы вложений, реакции, прочтения, восстановление пропусков и собственный
-outbox сюда не входят. Гарантии ровно одной доставки нет. Эти механизмы при
-необходимости добавляет проект-потребитель.
+`MemorySessionStorage` экспортируется для тестов: `new MemorySessionStorage()`. Его содержимое исчезает вместе с процессом; повторный QR-вход не заменяет постоянное хранилище.
 
 ## Ошибки
 
-Публичный `AdapterError` содержит безопасный `message` и `code`. Основные коды:
-`AUTH_REQUIRED`, `AUTH_CANCELLED`, `AUTH_TIMEOUT`, `INVALID_STATE`,
-`INVALID_OPTIONS`, `INVALID_CHALLENGE`, `INVALID_RESPONSE`, `STORAGE_ERROR`,
-`PROVIDER_ERROR`, `HANDLER_ERROR`, `QUEUE_OVERFLOW`.
+Методы возвращают `AdapterError` с безопасным `message` и машинным `code`. Проверяйте класс через `instanceof AdapterError`, а поведение выбирайте по коду. Асинхронные сбои активного подключения также приходят в `onState` как `{ state: "error", error }`.
 
-При ошибке хранения библиотека останавливает соединение. Не продолжайте отправку с
-неподтверждённым состоянием ключей. Код ошибки не заменяет проверку прав
-пользователя в HTTP-маршрутах вашего проекта.
+При передаче состояния клиенту сериализуйте ошибку явно: `JSON.stringify(new Error())` не включает `message`. Например:
 
-## Разработка
+```ts
+declare function publishState(payload: string): void;
+
+const removeState = adapter.onState((state) => {
+  const payload =
+    state.state === "error"
+      ? {
+          state: "error",
+          error: {
+            code:
+              state.error instanceof AdapterError
+                ? state.error.code
+                : "PROVIDER_ERROR",
+            message: state.error.message,
+          },
+        }
+      : state;
+  publishState(JSON.stringify(payload));
+});
+```
+
+| Код                 | Значение                                                                                 |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| `INVALID_OPTIONS`   | Неверные параметры, отсутствующий обработчик или пустое сообщение.                       |
+| `INVALID_STATE`     | Подключение уже активно, запускается или закрывается.                                    |
+| `AUTH_REQUIRED`     | Нет пригодной сессии или активного подключения.                                          |
+| `AUTH_CANCELLED`    | Операция отменена сигналом или закрытием.                                                |
+| `AUTH_TIMEOUT`      | Вход занял больше трёх минут.                                                            |
+| `INVALID_CHALLENGE` | Неизвестный, чужой, истёкший или уже обработанный запрос.                                |
+| `INVALID_RESPONSE`  | Пустой ответ, больше 4096 символов или несовпадение с pattern. Запрос остаётся активным. |
+| `STORAGE_ERROR`     | Ошибка чтения или записи сессии.                                                         |
+| `PROVIDER_ERROR`    | Ошибка провайдера, включая таймаут подключения.                                          |
+| `HANDLER_ERROR`     | Ошибка обработчика сообщений, состояния или событий входа.                               |
+| `QUEUE_OVERFLOW`    | Очередь входящих достигла лимита в 100 сообщений.                                        |
+| `DISCONNECTED`      | Подключение провайдера завершилось.                                                      |
+
+## Границы
+
+Chatmeld читает последние сообщения Telegram/VK, но не хранит переписку в собственной БД, не скачивает вложения и не реализует реакции и прочтения. Нет гарантии ровно одной доставки и постоянного outbox. Повтор отправки после сетевого сбоя может создать дубль; решение о повторе принимает ваше приложение.
+
+## Разработка и выпуск
 
 ```sh
-npm test
+git clone https://github.com/aimuzov/chatmeld.git
+cd chatmeld
+npm ci
 npm run setup:max
-npm run test:max
+npm run setup:vk-qr
 npm run check
+npm test
+npm run test:max
 npm run test:package
 npm pack
 ```
 
-Тесты не входят в пользовательские аккаунты. Проверки SDK, хранилища, RPC, отмены и
-QR дополняются отдельной проверкой собранного worker без `tsx`. Живой вход остаётся
-отдельной проверкой с владельцем аккаунта.
+Архив версии 0.1.0 называется `aimuzov-chatmeld-0.1.0.tgz`:
+
+```sh
+npm install -E /path/to/aimuzov-chatmeld-0.1.0.tgz
+```
+
+Тесты проверяют хранилище, подтверждения, отмену, SDK, RPC и собранные workers без входа в реальные аккаунты. Проверка живого входа проводится отдельно с владельцем аккаунта.
+
+Выпуск настроен через семейный reusable workflow `aimuzov/.github/.github/workflows/release.yml@v1`: Release Please готовит PR версии и GitHub Release. Публикация npm использует `aimuzov/infra-mcp-kit/publish@v3`, environment `npm` и trusted publishing через OIDC.
+
+Первый пакет нужно создать отдельной bootstrap-публикацией. После этого привяжите npm trusted publisher к репозиторию и workflow, затем включите `vars.NPM_PUBLISH=true`. Само наличие workflow или бейджа не подтверждает успешную публикацию; проверяйте результат release job и страницу пакета.
