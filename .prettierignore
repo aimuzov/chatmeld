@@ -6,3 +6,6 @@ python/uv.lock
 
 dist/
 *.tgz
+
+CHANGELOG.md
+.release-please-manifest.json
