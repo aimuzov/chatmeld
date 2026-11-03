@@ -1,5 +1,6 @@
 import { Api, utils } from "teleproto";
-import type { Message } from "../../core/provider.js";
+import { encodeMediaReference } from "../../library/media.js";
+import type { MediaAttachment, Message } from "../../core/provider.js";
 
 export function normalizeMessage(
   message: Api.Message,
@@ -15,6 +16,50 @@ export function normalizeMessage(
     direction: message.out ? "outgoing" : "incoming",
     text: message.message,
     sentAt: new Date(message.date * 1000).toISOString(),
-    attachments: message.media ? [{ kind: message.media.className }] : [],
+    attachments: telegramAttachments(message, accountId),
   };
+}
+
+export function telegramAttachments(
+  message: Api.Message,
+  accountId: string,
+): MediaAttachment[] {
+  const media = message.media;
+  if (!media) return [];
+  const reference = encodeMediaReference("telegram", accountId, {
+    chatId: utils.getPeerId(message.peerId),
+    messageId: String(message.id),
+  });
+  if (
+    media instanceof Api.MessageMediaPhoto &&
+    media.photo instanceof Api.Photo
+  )
+    return [{ kind: "photo", mimeType: "image/jpeg", reference }];
+  if (
+    media instanceof Api.MessageMediaDocument &&
+    media.document instanceof Api.Document
+  ) {
+    const doc = media.document;
+    const kind = doc.mimeType.startsWith("video/")
+      ? "video"
+      : doc.mimeType.startsWith("audio/")
+        ? "audio"
+        : doc.mimeType.startsWith("image/")
+          ? "photo"
+          : "document";
+    const fileName = doc.attributes.find(
+      (attribute) => attribute instanceof Api.DocumentAttributeFilename,
+    )?.fileName;
+    const size = Number(doc.size.toString());
+    return [
+      {
+        kind,
+        mimeType: doc.mimeType,
+        reference,
+        ...(fileName ? { fileName } : {}),
+        ...(Number.isSafeInteger(size) ? { size } : {}),
+      },
+    ];
+  }
+  return [{ kind: media.className }];
 }

@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: npm ci
-      - run: python -m pip install maxapi-python==2.5.0
+      - run: python -m pip install maxapi-python==2.5.0 instagrapi==3.2.2
       - run: npm exec playwright install --with-deps chromium
       - run: npm run check
       - run: npm test

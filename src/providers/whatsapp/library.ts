@@ -1,8 +1,10 @@
 import { Worker } from "node:worker_threads";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import { downloadAvatar } from "../../library/avatar.js";
 import { AdapterError, type AdapterErrorCode } from "../../library/errors.js";
 import type {
+  MediaFile,
   Chat,
   DriverContext,
   Message,
@@ -172,6 +174,16 @@ export function createWhatsAppDriver(options: {
     connect: (context) => open(context, false),
     authorize: (context) => open(context, true),
     listChats: () => request<Chat[]>("chats"),
+    getAvatar: async (target) =>
+      downloadAvatar(
+        await request<string | undefined>("avatar", target),
+        ["whatsapp.net", "whatsapp.com", "fbcdn.net"],
+        context?.signal,
+      ),
+    sendMedia: (chatId, media) =>
+      request<{ externalId: string }>("sendMedia", { chatId, media }),
+    downloadMedia: (reference) =>
+      request<MediaFile>("downloadMedia", { reference }),
     sendMessage: (chatId, text) =>
       request<{ externalId: string }>("send", { chatId, text }),
     async disconnect() {

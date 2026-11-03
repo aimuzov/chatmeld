@@ -1,9 +1,26 @@
 import makeWASocket, {
+  downloadMediaMessage,
+  normalizeMessageContent,
+  jidNormalizedUser,
+  proto,
   DisconnectReason,
   type WASocket,
+  type WAMessage,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
-import type { DriverContext } from "../../library/types.js";
+import {
+  MAX_MEDIA_BYTES,
+  collectMedia,
+  decodeMediaReference,
+  mediaFileName,
+  validateMedia,
+} from "../../library/media.js";
+import type {
+  MediaInput,
+  MediaFile,
+  AvatarTarget,
+  DriverContext,
+} from "../../library/types.js";
 import { AdapterError } from "../../library/errors.js";
 import { createWhatsAppAuthState } from "./session-storage.js";
 import { WhatsAppCatalog } from "./catalog.js";
@@ -25,6 +42,7 @@ export class WhatsAppLibraryRuntime {
   constructor(
     private accountId: string,
     private makeSocket: typeof makeWASocket = makeWASocket,
+    private downloadMessage: typeof downloadMediaMessage = downloadMediaMessage,
   ) {}
 
   private fail(error: Error): void {
@@ -184,6 +202,211 @@ export class WhatsAppLibraryRuntime {
     if (this.fault) throw this.fault;
     if (!this.connected || this.stopped)
       throw new Error("WhatsApp не подключён.");
+  }
+
+  async avatarUrl(target: AvatarTarget): Promise<string | undefined> {
+    this.requireConnection();
+    if (!isChatId(target.id))
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Некорректный ID аватара WhatsApp.",
+      );
+    try {
+      const url = await this.socket!.profilePictureUrl(target.id, "preview");
+      await this.credentials;
+      await this.auth!.flush();
+      this.requireConnection();
+      return url;
+    } catch (error) {
+      await this.credentials;
+      await this.auth!.flush();
+      this.requireConnection();
+      const status = (error as { output?: { statusCode?: number } } | undefined)
+        ?.output?.statusCode;
+      if (status === 404 || status === 410) return undefined;
+      throw new AdapterError(
+        "PROVIDER_ERROR",
+        "Не удалось получить аватар WhatsApp.",
+      );
+    }
+  }
+
+  async sendMedia(
+    chatId: string,
+    media: MediaInput,
+  ): Promise<{ externalId: string }> {
+    validateMedia(media);
+    this.requireConnection();
+    if (!isChatId(chatId))
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Некорректный ID чата WhatsApp.",
+      );
+    if (media.kind === "audio" && media.caption)
+      throw new AdapterError(
+        "UNSUPPORTED_OPERATION",
+        "WhatsApp не поддерживает подпись аудиофайла.",
+      );
+    try {
+      const data = Buffer.from(media.data);
+      const content =
+        media.kind === "photo"
+          ? { image: data, mimetype: media.mimeType, caption: media.caption }
+          : media.kind === "video"
+            ? { video: data, mimetype: media.mimeType, caption: media.caption }
+            : {
+                audio: data,
+                mimetype: media.mimeType,
+                ptt: false,
+                fileName: mediaFileName(media),
+              };
+      const result = await this.socket!.sendMessage(chatId, content);
+      await this.credentials;
+      await this.auth!.flush();
+      this.requireConnection();
+      if (!result?.key.id) throw new Error("SEND_NOT_CONFIRMED");
+      return { externalId: `${chatId}:${result.key.id}` };
+    } catch (error) {
+      await this.credentials;
+      await this.auth!.flush();
+      if (error instanceof AdapterError) throw error;
+      throw new AdapterError(
+        "PROVIDER_ERROR",
+        "Не удалось отправить медиа WhatsApp.",
+      );
+    }
+  }
+
+  async downloadMedia(reference: string): Promise<MediaFile> {
+    const payload = decodeMediaReference(reference, "whatsapp", this.accountId);
+    if (typeof payload.message !== "string")
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Некорректная ссылка медиа WhatsApp.",
+      );
+    this.requireConnection();
+    let raw: proto.WebMessageInfo;
+    try {
+      raw = proto.WebMessageInfo.decode(Buffer.from(payload.message, "base64"));
+    } catch {
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Некорректная ссылка медиа WhatsApp.",
+      );
+    }
+    if (
+      !raw.key?.remoteJid ||
+      !raw.key.id ||
+      !isChatId(jidNormalizedUser(raw.key.remoteJid))
+    )
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Некорректная ссылка медиа WhatsApp.",
+      );
+    const content = normalizeMessageContent(raw.message);
+    const media =
+      content?.imageMessage ??
+      content?.videoMessage ??
+      content?.audioMessage ??
+      content?.documentMessage;
+    if (!media)
+      throw new AdapterError(
+        "UNSUPPORTED_OPERATION",
+        "Это вложение WhatsApp нельзя скачать как медиафайл.",
+      );
+    this.validateMediaLocation(media);
+    if (
+      media.fileLength != null &&
+      BigInt(media.fileLength.toString()) > BigInt(MAX_MEDIA_BYTES)
+    )
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Медиа WhatsApp превышает допустимый размер.",
+      );
+    try {
+      const stream = await this.downloadMessage(
+        raw as WAMessage,
+        "stream",
+        { options: { signal: this.context!.signal } },
+        {
+          logger: pino({ level: "silent" }),
+          reuploadRequest: async (message) => {
+            const updated = await this.socket!.updateMediaMessage(message);
+            const content = normalizeMessageContent(updated.message);
+            const media =
+              content?.imageMessage ??
+              content?.videoMessage ??
+              content?.audioMessage ??
+              content?.documentMessage;
+            if (!media) throw new Error("INVALID_MEDIA");
+            this.validateMediaLocation(media);
+            return updated;
+          },
+        },
+      );
+      const file = await collectMedia(
+        stream,
+        media.mimetype ?? "application/octet-stream",
+        content?.documentMessage?.fileName ?? undefined,
+      );
+      await this.credentials;
+      await this.auth!.flush();
+      this.requireConnection();
+      return file;
+    } catch (error) {
+      await this.credentials;
+      await this.auth!.flush();
+      if (error instanceof AdapterError) throw error;
+      throw new AdapterError(
+        "PROVIDER_ERROR",
+        "Не удалось скачать медиа WhatsApp.",
+      );
+    }
+  }
+
+  private validateMediaLocation(media: {
+    url?: string | null;
+    directPath?: string | null;
+  }): void {
+    if (media.url) {
+      let url: URL;
+      try {
+        url = new URL(media.url);
+      } catch {
+        throw new AdapterError(
+          "INVALID_OPTIONS",
+          "Некорректная ссылка медиа WhatsApp.",
+        );
+      }
+      if (
+        url.protocol !== "https:" ||
+        url.username ||
+        url.password ||
+        (url.port && url.port !== "443") ||
+        !["whatsapp.net", "whatsapp.com", "fbcdn.net"].some(
+          (host) => url.hostname === host || url.hostname.endsWith("." + host),
+        )
+      )
+        throw new AdapterError(
+          "INVALID_OPTIONS",
+          "Некорректная ссылка медиа WhatsApp.",
+        );
+    }
+    if (
+      media.directPath &&
+      (!media.directPath.startsWith("/") ||
+        media.directPath.startsWith("//") ||
+        /[\\\r\n]/.test(media.directPath))
+    )
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Некорректная ссылка медиа WhatsApp.",
+      );
+    if (!media.url && !media.directPath)
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Некорректная ссылка медиа WhatsApp.",
+      );
   }
 
   async sendMessage(chatId: string, text: string) {

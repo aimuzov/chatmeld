@@ -1,5 +1,6 @@
 import type { MessageContext } from "vk-io";
-import type { Chat, Message } from "../../core/provider.js";
+import { encodeMediaReference } from "../../library/media.js";
+import type { MediaAttachment, Chat, Message } from "../../core/provider.js";
 
 export function normalizeMessage(
   context: MessageContext,
@@ -17,9 +18,12 @@ export function normalizeMessage(
     direction: "incoming",
     text: context.text ?? "",
     sentAt: new Date(context.createdAt * 1000).toISOString(),
-    attachments: context.attachments.map((attachment) => ({
-      kind: attachment.type,
-    })),
+    attachments: normalizeAttachments(
+      context.attachments,
+      String(context.peerId),
+      context.conversationMessageId,
+      accountId,
+    ),
   };
 }
 
@@ -50,6 +54,88 @@ export function conversationChats(page: {
         conversation.chat_settings?.title ||
         names.get(conversation.peer.id) ||
         String(conversation.peer.id),
+    };
+  });
+}
+
+type VkAttachment = {
+  type: string;
+  id?: number;
+  ownerId?: number;
+  doc?: { ext?: string; title?: string; size?: number };
+  isAudio?: boolean;
+  extension?: string;
+  title?: string;
+  size?: number;
+};
+export function vkDocumentMime(
+  extension: string | undefined,
+): string | undefined {
+  const types: Record<string, string> = {
+    mp3: "audio/mpeg",
+    ogg: "audio/ogg",
+    opus: "audio/ogg",
+    m4a: "audio/mp4",
+    wav: "audio/wav",
+    flac: "audio/flac",
+    mp4: "video/mp4",
+    webm: "video/webm",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+  };
+  return extension ? types[extension.toLowerCase()] : undefined;
+}
+export function normalizeAttachments(
+  attachments: readonly unknown[],
+  chatId: string,
+  conversationMessageId: number | undefined,
+  accountId: string,
+): MediaAttachment[] {
+  return attachments.map((value, index) => {
+    const attachment = value as VkAttachment;
+    const mimeType =
+      attachment.type === "doc"
+        ? vkDocumentMime(attachment.doc?.ext ?? attachment.extension)
+        : undefined;
+    const kind =
+      attachment.type === "audio_message"
+        ? "audio"
+        : attachment.type === "doc" && mimeType
+          ? mimeType.startsWith("audio/")
+            ? "audio"
+            : mimeType.startsWith("video/")
+              ? "video"
+              : "photo"
+          : attachment.type;
+    const downloadable = ["photo", "video", "audio"].includes(kind);
+    const fileName =
+      attachment.type === "doc"
+        ? (attachment.doc?.title ?? attachment.title)
+        : undefined;
+    const size = attachment.doc?.size ?? attachment.size;
+    return {
+      kind,
+      ...(downloadable && conversationMessageId
+        ? {
+            reference: encodeMediaReference("vk", accountId, {
+              chatId,
+              conversationMessageId,
+              index,
+              ...(attachment.id !== undefined
+                ? {
+                    attachmentType: attachment.type,
+                    attachmentId: attachment.id,
+                    ownerId: attachment.ownerId,
+                  }
+                : {}),
+            }),
+          }
+        : {}),
+      ...(mimeType ? { mimeType } : {}),
+      ...(fileName ? { fileName } : {}),
+      ...(typeof size === "number" ? { size } : {}),
     };
   });
 }

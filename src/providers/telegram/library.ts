@@ -1,15 +1,27 @@
+import { CustomFile } from "teleproto/client/uploads";
 import { Api, TelegramClient, utils } from "teleproto";
 import { StringSession } from "teleproto/sessions";
 import { NewMessage, Raw, type NewMessageEvent } from "teleproto/events";
 import { Logger, LogLevel } from "teleproto/extensions/Logger";
 import type {
+  MediaInput,
+  MediaFile,
+  Avatar,
+  AvatarTarget,
   Chat,
   DriverContext,
   ProviderDriver,
 } from "../../library/types.js";
+import { inferAvatar } from "../../library/avatar.js";
 import { readStored, writeStored } from "../../library/storage.js";
 import { AdapterError } from "../../library/errors.js";
-import { normalizeMessage } from "./normalize.js";
+import {
+  MAX_MEDIA_BYTES,
+  decodeMediaReference,
+  mediaFileName,
+  validateMedia,
+} from "../../library/media.js";
+import { normalizeMessage, telegramAttachments } from "./normalize.js";
 import { telegramLoginUrl } from "./qr.js";
 
 export function createTelegramDriver(options: {
@@ -195,6 +207,29 @@ class TelegramDriver implements ProviderDriver {
     return chats;
   }
 
+  async getAvatar(target: AvatarTarget): Promise<Avatar | undefined> {
+    const client = this.ready();
+    const chats = await this.listChats();
+    if (target.type === "chat" && !chats.some((chat) => chat.id === target.id))
+      throw new AdapterError("INVALID_OPTIONS", "Чат Telegram не найден.");
+    try {
+      const data = await client.downloadProfilePhoto(target.id, {
+        isBig: false,
+      });
+      this.queueSession();
+      await this.writes;
+      if (!data || typeof data === "string" || data.length === 0)
+        return undefined;
+      return inferAvatar(data);
+    } catch (error) {
+      if (this.failure) throw this.failure;
+      throw new AdapterError(
+        "PROVIDER_ERROR",
+        "Не удалось получить аватар Telegram.",
+      );
+    }
+  }
+
   async listMessages(chatId: string, options: { limit?: number } = {}) {
     if (!(await this.listChats()).some((chat) => chat.id === chatId))
       throw new Error("Чат Telegram не найден.");
@@ -209,6 +244,147 @@ class TelegramDriver implements ProviderDriver {
           normalized.displayName = utils.getDisplayName(message.sender);
         return normalized;
       });
+  }
+
+  async sendMedia(
+    chatId: string,
+    media: MediaInput,
+  ): Promise<{ externalId: string }> {
+    validateMedia(media);
+    if (!(await this.listChats()).some((chat) => chat.id === chatId))
+      throw new AdapterError("INVALID_OPTIONS", "Чат Telegram не найден.");
+    try {
+      const message = await this.ready().sendFile(chatId, {
+        file: new CustomFile(
+          mediaFileName(media),
+          media.data.length,
+          "",
+          Buffer.from(media.data),
+        ),
+        caption: media.caption ?? "",
+        parseMode: false,
+        supportsStreaming:
+          media.kind === "video" && media.mimeType === "video/mp4",
+        voiceNote: false,
+        forceDocument: media.kind === "audio",
+        ...(media.kind === "audio"
+          ? {
+              attributes: [
+                new Api.DocumentAttributeAudio({
+                  duration: 0,
+                  title: mediaFileName(media),
+                }),
+              ],
+            }
+          : {}),
+      });
+      this.queueSession();
+      await this.writes;
+      if (!message.id) throw new Error("SEND_NOT_CONFIRMED");
+      return { externalId: `${chatId}:${message.id}` };
+    } catch (error) {
+      if (error instanceof AdapterError) throw error;
+      throw new AdapterError(
+        "PROVIDER_ERROR",
+        "Не удалось отправить медиа Telegram.",
+      );
+    }
+  }
+
+  async downloadMedia(reference: string): Promise<MediaFile> {
+    const value = decodeMediaReference(
+      reference,
+      "telegram",
+      this.options.accountId,
+    );
+    if (
+      typeof value.chatId !== "string" ||
+      typeof value.messageId !== "string" ||
+      !/^\d+$/.test(value.messageId) ||
+      !Number.isSafeInteger(Number(value.messageId))
+    )
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Некорректная ссылка медиа Telegram.",
+      );
+    if (!(await this.listChats()).some((chat) => chat.id === value.chatId))
+      throw new AdapterError("INVALID_OPTIONS", "Чат Telegram не найден.");
+    try {
+      const client = this.ready();
+      const messages = await client.getMessages(value.chatId, {
+        ids: [Number(value.messageId)],
+      });
+      const message = messages[0];
+      if (
+        !(message instanceof Api.Message) ||
+        message.id !== Number(value.messageId)
+      )
+        throw new Error("MEDIA_NOT_FOUND");
+      const attachment = telegramAttachments(
+        message,
+        this.options.accountId,
+      )[0];
+      if (!attachment?.reference)
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Это вложение Telegram нельзя скачать как медиафайл.",
+        );
+      if (attachment.size !== undefined && attachment.size > MAX_MEDIA_BYTES)
+        throw new AdapterError(
+          "INVALID_OPTIONS",
+          "Медиа Telegram превышает допустимый размер.",
+        );
+      if (
+        message.media instanceof Api.MessageMediaPhoto &&
+        message.media.photo instanceof Api.Photo
+      ) {
+        for (const size of message.media.photo.sizes) {
+          const full =
+            "size" in size
+              ? size.size
+              : "sizes" in size
+                ? Math.max(...size.sizes)
+                : 0;
+          if (full > MAX_MEDIA_BYTES)
+            throw new AdapterError(
+              "INVALID_OPTIONS",
+              "Медиа Telegram превышает допустимый размер.",
+            );
+        }
+      }
+      const control = new AbortController();
+      const data = await client.downloadMedia(message, {
+        signal: AbortSignal.any([this.context!.signal, control.signal]),
+        progressCallback: (received, total) => {
+          if (
+            BigInt(received.toString()) > BigInt(MAX_MEDIA_BYTES) ||
+            BigInt(total.toString()) > BigInt(MAX_MEDIA_BYTES)
+          ) {
+            control.abort();
+            throw new Error("MEDIA_TOO_LARGE");
+          }
+        },
+      });
+      this.queueSession();
+      await this.writes;
+      if (
+        !(data instanceof Uint8Array) ||
+        !data.length ||
+        data.length > MAX_MEDIA_BYTES
+      )
+        throw new Error("INVALID_MEDIA");
+      return {
+        data: new Uint8Array(data),
+        mimeType: attachment.mimeType ?? "application/octet-stream",
+        ...(attachment.fileName ? { fileName: attachment.fileName } : {}),
+      };
+    } catch (error) {
+      if (error instanceof AdapterError) throw error;
+      throw new AdapterError(
+        "PROVIDER_ERROR",
+        "Не удалось скачать медиа Telegram.",
+      );
+    }
   }
 
   async sendMessage(

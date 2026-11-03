@@ -1,8 +1,11 @@
 import { AuthFlow } from "./auth.js";
 import { SerializedStorage } from "./storage.js";
+import { validateMedia, decodeMediaReference } from "./media.js";
 import { AdapterError, abortable, cancelled, safeError } from "./errors.js";
 import type {
   AdapterOptions,
+  AvatarTarget,
+  MediaInput,
   AdapterState,
   AuthEvent,
   DriverContext,
@@ -45,8 +48,21 @@ export class Adapter implements MessagingAdapter {
         "INVALID_OPTIONS",
         "Нужны идентификатор аккаунта и хранилище сессии.",
       );
-    if (!["telegram", "vk", "max", "whatsapp"].includes(options.provider))
+    if (
+      !["telegram", "vk", "max", "whatsapp", "instagram"].includes(
+        options.provider,
+      )
+    )
       throw new AdapterError("INVALID_OPTIONS", "Неизвестный мессенджер.");
+    if (
+      options.provider === "instagram" &&
+      (typeof options.username !== "string" ||
+        !/^[a-zA-Z0-9._]{1,30}$/.test(options.username))
+    )
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Для Instagram нужен username без @.",
+      );
     if (
       options.provider === "telegram" &&
       (!Number.isSafeInteger(options.apiId) ||
@@ -277,12 +293,64 @@ export class Adapter implements MessagingAdapter {
     try {
       return await abortable(action(this.driver), this.control.signal);
     } catch (error) {
+      if (
+        error instanceof AdapterError &&
+        ["INVALID_OPTIONS", "UNSUPPORTED_OPERATION"].includes(error.code)
+      )
+        throw error;
       this.fail(error);
       throw this.fault ?? safeError(error);
     }
   }
   listChats() {
     return this.perform((driver) => driver.listChats());
+  }
+  sendMedia(chatId: string, media: MediaInput) {
+    try {
+      if (typeof chatId !== "string" || !chatId.trim())
+        throw new AdapterError("INVALID_OPTIONS", "Нужен ID диалога.");
+      validateMedia(media);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    const copied = { ...media, data: new Uint8Array(media.data) };
+    return this.perform((driver) => {
+      if (!driver.sendMedia)
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Провайдер не поддерживает отправку медиа.",
+        );
+      return driver.sendMedia(chatId, copied);
+    });
+  }
+  downloadMedia(reference: string) {
+    try {
+      decodeMediaReference(reference, this.provider, this.accountId);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    return this.perform((driver) => {
+      if (!driver.downloadMedia)
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Провайдер не поддерживает скачивание медиа.",
+        );
+      return driver.downloadMedia(reference);
+    });
+  }
+  getAvatar(target: AvatarTarget) {
+    if (
+      !target ||
+      !["chat", "user"].includes(target.type) ||
+      typeof target.id !== "string" ||
+      !target.id.trim()
+    )
+      return Promise.reject(
+        new AdapterError("INVALID_OPTIONS", "Нужны тип и ID аватарки."),
+      );
+    return this.perform(
+      (driver) => driver.getAvatar?.(target) ?? Promise.resolve(undefined),
+    );
   }
   listMessages(chatId: string, options: { limit?: number } = {}) {
     const limit = options.limit ?? 100;
