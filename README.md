@@ -98,7 +98,7 @@ try {
 ```sh
 npm pkg set type=module
 npm install -D -E typescript @types/node
-npx tsc app.ts sqlite-storage.ts --module nodenext --target es2022 --outDir dist
+npx tsc app.ts sqlite-storage.ts --module nodenext --target es2022 --types node --outDir dist
 node dist/app.js
 ```
 
