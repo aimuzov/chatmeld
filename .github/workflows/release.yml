@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish again, e.g. v0.1.0.
+        required: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    uses: aimuzov/.github/.github/workflows/release.yml@v1
+
+  check:
+    needs: release
+    if: needs.release.outputs.created == 'true'
+    uses: ./.github/workflows/check.yml
+
+  publish:
+    needs: [release, check]
+    if: >-
+      !cancelled() && vars.NPM_PUBLISH == 'true' &&
+      (github.event_name == 'workflow_dispatch' || needs.check.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@aimuzov/chatmeld
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: aimuzov/infra-mcp-kit/publish@v3
+        with:
+          ref: ${{ needs.release.outputs.tag || inputs.tag }}
+          npm-token: ${{ secrets.NPM_TOKEN }}

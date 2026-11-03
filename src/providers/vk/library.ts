@@ -184,6 +184,47 @@ class VkDriver implements ProviderDriver {
     }
   }
 
+  async listMessages(chatId: string, options: { limit?: number } = {}) {
+    if (!/^-?\d+$/.test(chatId) || !Number.isSafeInteger(Number(chatId)))
+      throw new AdapterError("INVALID_OPTIONS", "Некорректный ID чата VK.");
+    await this.requireAuthorization();
+    try {
+      const page = await this.vk!.api.messages.getHistory({
+        peer_id: Number(chatId),
+        count: options.limit ?? 100,
+        extended: 1,
+      });
+      const names = new Map<number, string>(
+        (
+          (page.profiles ?? []) as {
+            id: number;
+            first_name?: string;
+            last_name?: string;
+          }[]
+        ).map((user) => [
+          user.id,
+          [user.first_name, user.last_name].filter(Boolean).join(" "),
+        ]),
+      );
+      return page.items.map((message) => ({
+        provider: "vk" as const,
+        accountId: this.accountId,
+        chatId,
+        messageId: `${chatId}:${message.conversation_message_id ?? message.id}`,
+        senderId: String(message.from_id),
+        displayName: names.get(message.from_id),
+        direction: message.out ? ("outgoing" as const) : ("incoming" as const),
+        text: message.text ?? "",
+        sentAt: new Date(message.date * 1000).toISOString(),
+        attachments: (message.attachments ?? []).map((attachment) => ({
+          kind: attachment.type,
+        })),
+      }));
+    } catch (error) {
+      throw vkError(error);
+    }
+  }
+
   async sendMessage(
     chatId: string,
     text: string,

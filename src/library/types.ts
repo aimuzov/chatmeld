@@ -44,6 +44,10 @@ export interface ProviderDriver {
   connect(context: DriverContext): Promise<void>;
   authorize(context: DriverContext): Promise<void>;
   listChats(): Promise<Chat[]>;
+  listMessages?(
+    chatId: string,
+    options?: { limit?: number },
+  ): Promise<Message[]>;
   sendMessage(chatId: string, text: string): Promise<{ externalId: string }>;
   disconnect(): Promise<void>;
 }
@@ -75,6 +79,10 @@ export interface MessagingAdapter {
   }): Promise<void>;
   respondToChallenge(response: { challengeId: string; value: string }): void;
   listChats(): Promise<Chat[]>;
+  listMessages?(
+    chatId: string,
+    options?: { limit?: number },
+  ): Promise<Message[]>;
   sendMessage(chatId: string, text: string): Promise<{ externalId: string }>;
   onMessage(handler: (message: Message) => void | Promise<void>): () => void;
   onState(handler: (state: AdapterState) => void): () => void;

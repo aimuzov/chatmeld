@@ -195,6 +195,22 @@ class TelegramDriver implements ProviderDriver {
     return chats;
   }
 
+  async listMessages(chatId: string, options: { limit?: number } = {}) {
+    if (!(await this.listChats()).some((chat) => chat.id === chatId))
+      throw new Error("Чат Telegram не найден.");
+    const messages = await this.ready().getMessages(chatId, {
+      limit: options.limit ?? 100,
+    });
+    return messages
+      .filter((message) => message instanceof Api.Message)
+      .map((message) => {
+        const normalized = normalizeMessage(message, this.options.accountId);
+        if (message.sender)
+          normalized.displayName = utils.getDisplayName(message.sender);
+        return normalized;
+      });
+  }
+
   async sendMessage(
     chatId: string,
     text: string,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { TelegramClient } from "teleproto";
+import bigInt from "big-integer";
+import { Api, TelegramClient } from "teleproto";
 import { StringSession } from "teleproto/sessions";
 import { AuthFlow } from "../src/library/auth.js";
 import { readStored, writeStored } from "../src/library/storage.js";
@@ -195,4 +196,69 @@ test("Telegram cancellation rejects a pending 2FA challenge and closes its clien
   await assert.rejects(authorizing, /отменена/);
   assert.equal(destroyed, true);
   assert.equal(f.entries.size, 0);
+});
+
+test("Telegram history restores a private channel entity before requesting messages", async (t) => {
+  const f = fixture();
+  await writeStored(f.storage, "telegram/session", { session: "" });
+  const channel = new Api.Channel({
+    id: bigInt(42),
+    accessHash: bigInt(98765),
+    title: "Private",
+    photo: new Api.ChatPhotoEmpty(),
+    date: 1700000000,
+  });
+  t.mock.method(TelegramClient.prototype, "connect", async () => true);
+  t.mock.method(
+    TelegramClient.prototype,
+    "checkAuthorization",
+    async () => true,
+  );
+  t.mock.method(TelegramClient.prototype, "getMe", async () => ({
+    bot: false,
+  }));
+  t.mock.method(TelegramClient.prototype, "destroy", async () => undefined);
+  t.mock.method(
+    TelegramClient.prototype,
+    "iterDialogs",
+    async function* (this: TelegramClient) {
+      this._entityCache.add([channel]);
+      yield { id: bigInt("-10042"), title: "Private" };
+    },
+  );
+  t.mock.method(
+    TelegramClient.prototype,
+    "invoke",
+    async (request: unknown) => {
+      assert.ok(request instanceof Api.messages.GetHistory);
+      assert.ok(
+        request.peer instanceof Api.InputPeerChannel,
+        JSON.stringify(request.peer),
+      );
+      assert.equal(request.peer.accessHash.toString(), "98765");
+      return new Api.messages.Messages({
+        messages: [
+          new Api.Message({
+            id: 7,
+            peerId: new Api.PeerChannel({ channelId: bigInt(42) }),
+            date: 1700000000,
+            message: "Saved history",
+            out: true,
+          }),
+        ],
+        topics: [],
+        chats: [channel],
+        users: [],
+      });
+    },
+  );
+  try {
+    await f.driver.connect(f.context);
+    const messages = await f.driver.listMessages!("-10042", { limit: 10 });
+    assert.equal(messages[0]?.text, "Saved history");
+    assert.equal(messages[0]?.messageId, "-10042:7");
+    assert.equal(messages[0]?.direction, "outgoing");
+  } finally {
+    await f.driver.disconnect();
+  }
 });
