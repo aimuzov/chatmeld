@@ -1,0 +1,5 @@
+[project]
+name = "chatmeld-max"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["maxapi-python==2.5.0"]

@@ -1,0 +1,8 @@
+package-lock.json
+.data/
+node_modules/
+python/.venv/
+python/uv.lock
+
+dist/
+*.tgz

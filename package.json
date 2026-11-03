@@ -1,0 +1,79 @@
+{
+  "name": "chatmeld",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal-account messaging library with external session storage",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env --import tsx src/cli.ts",
+    "check": "tsc --noEmit && prettier --check .",
+    "test": "node --import tsx --test test/*.test.ts",
+    "format": "prettier --write .",
+    "setup:max": "uv --directory python sync --frozen",
+    "test:max": "uv --directory python run --frozen python -m unittest discover -s tests",
+    "setup:vk-qr": "playwright install chromium",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "test:package": "npm run build && node --test test/package/*.test.mjs"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "8.7.5",
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "big-integer": "1.6.52",
+    "jsqr": "1.4.0",
+    "pino": "10.4.0",
+    "playwright": "1.64.1",
+    "pngjs": "7.0.0",
+    "qrcode": "1.5.4",
+    "teleproto": "1.232.1",
+    "vk-io": "4.10.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "@types/pngjs": "6.0.5",
+    "@types/qrcode": "1.5.6",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "python/library_bridge.py",
+    "python/library_store.py",
+    "python/chats.py",
+    "python/normalize.py",
+    "python/pyproject.toml",
+    "python/uv.lock"
+  ],
+  "sideEffects": [
+    "./dist/providers/whatsapp/library-worker.js"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aimuzov/chatmeld.git"
+  },
+  "homepage": "https://github.com/aimuzov/chatmeld#readme",
+  "bugs": {
+    "url": "https://github.com/aimuzov/chatmeld/issues"
+  },
+  "keywords": [
+    "messaging",
+    "telegram",
+    "whatsapp",
+    "max",
+    "vk",
+    "qr",
+    "typescript"
+  ]
+}
