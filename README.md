@@ -394,6 +394,8 @@ npm install -E /path/to/aimuzov-chatmeld-0.1.0.tgz
 
 Tests cover storage, challenges, cancellation, SDK boundaries, RPC and compiled workers without logging into real accounts. Live authorization is a separate check with the account owner.
 
-Releases use the shared workflow `aimuzov/.github/.github/workflows/release.yml@v1`: Release Please prepares the version PR and GitHub Release. npm publishing uses `aimuzov/infra-mcp-kit/publish@v3`, the `npm` environment and trusted publishing through OIDC.
+Releases use the shared workflow `aimuzov/.github/.github/workflows/release.yml@v1`: Release Please prepares the version PR and GitHub Release. npm publishing uses `aimuzov/infra-mcp-kit/publish@v3` and the `npm` environment.
 
-Create the first package with a separate bootstrap publication. Then bind the npm trusted publisher to the repository and workflow and enable `vars.NPM_PUBLISH=true`. A workflow or badge alone does not confirm publication; check the release job result and package page.
+Configure either a trusted publisher through OIDC or the repository secret `NPM_TOKEN` with publish permissions, then enable `vars.NPM_PUBLISH=true`. OIDC requires the package to exist before binding the trusted publisher. A token can publish the first version through the same workflow.
+
+Check the release job result and package page to confirm publication.
