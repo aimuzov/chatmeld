@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/aimuzov/chatmeld/compare/v0.1.0...v0.1.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **docs:** correct quickstart and npm publishing instructions ([add14a7](https://github.com/aimuzov/chatmeld/commit/add14a79692764e7394488ed4c2c18e7de344bf5))
+* **docs:** load Node types in TypeScript quickstart ([3190453](https://github.com/aimuzov/chatmeld/commit/3190453c4eb235139b1d5bad12a1084ee4c3d87d))
+
 ## 0.1.0 (2026-11-03)
 
 
