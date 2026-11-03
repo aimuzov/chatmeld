@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-  <img src=".github/assets/banner.en.png" alt="Chatmeld" width="100%">
+  <img src=".github/assets/banner.en.jpg" alt="Chatmeld" width="100%">
 </p>
 
 <p align="center">
