@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0](https://github.com/aimuzov/chatmeld/compare/v0.1.1...v0.2.0) (2026-11-03)
+
+
+### Features
+
+* add Instagram, avatars and media messaging ([0f4ebd7](https://github.com/aimuzov/chatmeld/commit/0f4ebd7334c6fcc309968990480aa7174a3bbe72))
+* add Instagram, avatars and media messaging ([aaa200f](https://github.com/aimuzov/chatmeld/commit/aaa200f5f036efd1990bb11630fce38880bd6590))
+
+
+### Bug Fixes
+
+* keep connections open for unavailable media ([1133c98](https://github.com/aimuzov/chatmeld/commit/1133c98e86803b9c495afd5ce0aaea0a836e11b3))
+* preserve Telegram connection after download size limit ([1906b3e](https://github.com/aimuzov/chatmeld/commit/1906b3ec04c811e12917f2a7a970e51da9cdbc4a))
+
 ## [0.1.1](https://github.com/aimuzov/chatmeld/compare/v0.1.0...v0.1.1) (2026-11-03)
 
 
