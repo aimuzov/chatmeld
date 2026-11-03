@@ -1,3 +1,8 @@
+import {
+  FileReferenceExpiredError,
+  FileReferenceInvalidError,
+  FileIdInvalidError,
+} from "teleproto/errors";
 import { CustomFile } from "teleproto/client/uploads";
 import { Api, TelegramClient, utils } from "teleproto";
 import { StringSession } from "teleproto/sessions";
@@ -319,7 +324,10 @@ class TelegramDriver implements ProviderDriver {
         !(message instanceof Api.Message) ||
         message.id !== Number(value.messageId)
       )
-        throw new Error("MEDIA_NOT_FOUND");
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Сообщение или медиа Telegram больше недоступно.",
+        );
       const attachment = telegramAttachments(
         message,
         this.options.accountId,
@@ -367,11 +375,12 @@ class TelegramDriver implements ProviderDriver {
       });
       this.queueSession();
       await this.writes;
-      if (
-        !(data instanceof Uint8Array) ||
-        !data.length ||
-        data.length > MAX_MEDIA_BYTES
-      )
+      if (data === undefined || (data instanceof Uint8Array && !data.length))
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Медиа Telegram больше недоступно.",
+        );
+      if (!(data instanceof Uint8Array) || data.length > MAX_MEDIA_BYTES)
         throw new Error("INVALID_MEDIA");
       return {
         data: new Uint8Array(data),
@@ -380,6 +389,15 @@ class TelegramDriver implements ProviderDriver {
       };
     } catch (error) {
       if (error instanceof AdapterError) throw error;
+      if (
+        error instanceof FileReferenceExpiredError ||
+        error instanceof FileReferenceInvalidError ||
+        error instanceof FileIdInvalidError
+      )
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Ссылка медиа Telegram больше недействительна.",
+        );
       throw new AdapterError(
         "PROVIDER_ERROR",
         "Не удалось скачать медиа Telegram.",

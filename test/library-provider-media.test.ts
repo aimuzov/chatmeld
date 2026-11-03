@@ -4,6 +4,8 @@ import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import bigInt from "big-integer";
 import { Api, TelegramClient } from "teleproto";
+import { FileReferenceExpiredError } from "teleproto/errors";
+import { Adapter } from "../src/library/adapter.js";
 import { Upload } from "vk-io";
 import { normalizeAttachments } from "../src/providers/vk/normalize.js";
 import {
@@ -514,5 +516,183 @@ test("WhatsApp preserves protobuf media keys and large lengths, sends buffers an
     assert.equal(sdkCalls, 4);
   } finally {
     await runtime.close();
+  }
+});
+
+test("Telegram stale media references leave the connected adapter usable", async (t) => {
+  t.mock.method(TelegramClient.prototype, "connect", async () => true);
+  t.mock.method(
+    TelegramClient.prototype,
+    "checkAuthorization",
+    async () => true,
+  );
+  t.mock.method(TelegramClient.prototype, "getMe", async () => ({
+    bot: false,
+  }));
+  t.mock.method(TelegramClient.prototype, "destroy", async () => undefined);
+  t.mock.method(TelegramClient.prototype, "iterDialogs", async function* () {
+    yield { id: bigInt(42), title: "Peer" };
+  });
+  t.mock.method(TelegramClient.prototype, "sendMessage", async () => ({
+    id: 8,
+  }));
+  let mode = "message-missing";
+  t.mock.method(TelegramClient.prototype, "getMessages", async () =>
+    mode === "message-missing"
+      ? []
+      : mode === "attachment-missing"
+        ? [
+            new Api.Message({
+              id: 7,
+              peerId: new Api.PeerUser({ userId: bigInt(42) }),
+              date: 1700000000,
+              message: "Edited",
+            }),
+          ]
+        : [tgPhoto()],
+  );
+  t.mock.method(TelegramClient.prototype, "downloadMedia", async () => {
+    if (mode === "expired")
+      throw new FileReferenceExpiredError({ capture: 0, request: undefined });
+    if (mode === "sdk-failure") throw Error("SECRET NETWORK ERROR");
+    return undefined;
+  });
+  const c = context();
+  await writeStored(c.storage, "telegram/session", { session: "" });
+  const driver = createTelegramDriver({
+    accountId: "a",
+    apiId: 1,
+    apiHash: "test",
+  });
+  const adapter = new Adapter(
+    {
+      provider: "telegram",
+      accountId: "a",
+      apiId: 1,
+      apiHash: "test",
+      storage: c.storage,
+    },
+    async () => driver,
+  );
+  const reference = encodeMediaReference("telegram", "a", {
+    chatId: "42",
+    messageId: "7",
+  });
+  await adapter.connect();
+  try {
+    for (mode of [
+      "message-missing",
+      "attachment-missing",
+      "file-missing",
+      "expired",
+    ]) {
+      await assert.rejects(
+        adapter.downloadMedia(reference),
+        (error: { code: string }) => error.code === "UNSUPPORTED_OPERATION",
+      );
+      assert.deepEqual(await adapter.listChats(), [
+        { id: "42", title: "Peer" },
+      ]);
+      assert.deepEqual(await adapter.sendMessage("42", "Still connected"), {
+        externalId: "42:8",
+      });
+    }
+    mode = "sdk-failure";
+    await assert.rejects(
+      driver.downloadMedia!(reference),
+      (error: { code: string; message: string }) =>
+        error.code === "PROVIDER_ERROR" && !error.message.includes("SECRET"),
+    );
+  } finally {
+    await adapter.disconnect();
+  }
+});
+
+test("VK missing messages and attachments leave the connected adapter usable", async (t) => {
+  let mode = "message-missing";
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async (url: string | URL | Request, options?: RequestInit) => {
+      const method = String(url).split("/").at(-1);
+      if (method === "users.get")
+        return Response.json({ response: [{ id: 42 }] });
+      if (method === "messages.getLongPollServer")
+        return new Promise<Response>((_, reject) =>
+          options!.signal!.addEventListener(
+            "abort",
+            () => reject(Error("aborted")),
+            { once: true },
+          ),
+        );
+      if (method === "messages.send")
+        return Response.json({ response: [{ conversation_message_id: 8 }] });
+      if (method === "messages.getByConversationMessageId") {
+        if (mode === "sdk-failure")
+          return Response.json({
+            error: { error_code: 15, error_msg: "SECRET API ERROR" },
+          });
+        const attachment =
+          mode === "video-missing"
+            ? { type: "video" }
+            : mode === "file-missing"
+              ? { type: "audio", audio: { url: "" } }
+              : undefined;
+        return Response.json({
+          response: {
+            items:
+              mode === "message-missing"
+                ? []
+                : [
+                    {
+                      id: 9,
+                      conversation_message_id: 7,
+                      peer_id: 42,
+                      attachments: attachment ? [attachment] : [],
+                    },
+                  ],
+          },
+        });
+      }
+      return Response.json({ response: { count: 0, items: [] } });
+    },
+  );
+  const c = context();
+  await writeStored(c.storage, "vk/token", { token: "test" });
+  const driver = createVkDriver({ accountId: "a" });
+  const adapter = new Adapter(
+    { provider: "vk", accountId: "a", storage: c.storage },
+    async () => driver,
+  );
+  const reference = encodeMediaReference("vk", "a", {
+    chatId: "42",
+    conversationMessageId: 7,
+    index: 0,
+  });
+  await adapter.connect();
+  try {
+    for (mode of [
+      "message-missing",
+      "attachment-missing",
+      "video-missing",
+      "file-missing",
+    ]) {
+      await assert.rejects(
+        adapter.downloadMedia(reference),
+        (error: { code: string }) => error.code === "UNSUPPORTED_OPERATION",
+      );
+      assert.deepEqual(await adapter.listChats(), []);
+      assert.deepEqual(await adapter.sendMessage("42", "Still connected"), {
+        externalId: "42:8",
+      });
+    }
+    mode = "sdk-failure";
+    await assert.rejects(
+      driver.downloadMedia!(reference),
+      (error: { code: string; message: string }) =>
+        error.code === "PROVIDER_ERROR" && !error.message.includes("SECRET"),
+    );
+  } finally {
+    await adapter.disconnect();
   }
 });

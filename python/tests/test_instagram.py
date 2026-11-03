@@ -206,6 +206,27 @@ class RuntimeSafetyTests(unittest.IsolatedAsyncioTestCase):
     asyncTearDown = RuntimeTests.asyncTearDown
     connect = RuntimeTests.connect
 
+    async def test_missing_media_reference_is_unsupported_and_session_stays_usable(self):
+        await self.connect()
+        with self.assertRaises(BridgeError) as error:
+            await self.runtime.command('downloadMedia', {'payload': {
+                'chatId': CHAT, 'messageId': 'deleted-message', 'index': 0,
+            }})
+        self.assertEqual(error.exception.code, 'UNSUPPORTED_OPERATION')
+        self.assertTrue(self.runtime.connected)
+        self.assertFalse(self.runtime.stopped)
+        self.assertEqual(await self.runtime.command('chats', {}), [{'id': CHAT, 'title': 'Friend Name'}])
+
+    async def test_download_sdk_auth_and_network_errors_keep_their_codes(self):
+        await self.connect()
+        for failure, code in [(LoginRequired('safe'), 'AUTH_REQUIRED'), (RuntimeError('safe'), 'PROVIDER_ERROR')]:
+            with patch.object(self.client, 'private_request', side_effect=failure):
+                with self.assertRaises(BridgeError) as error:
+                    await self.runtime.command('downloadMedia', {'payload': {
+                        'chatId': CHAT, 'messageId': MID, 'index': 0,
+                    }})
+                self.assertEqual(error.exception.code, code)
+
     async def test_download_stops_at_matching_page_even_when_cursor_remains(self):
         await self.connect()
         item = {'item_id': MID, 'item_type': 'media', 'media': {

@@ -9,6 +9,11 @@ const invalid = () =>
   );
 const failed = () =>
   new AdapterError("PROVIDER_ERROR", "Не удалось скачать медиафайл.");
+const unavailable = () =>
+  new AdapterError(
+    "UNSUPPORTED_OPERATION",
+    "Медиафайл недоступен или превышает лимит размера.",
+  );
 
 export function encodeMediaReference(
   provider: ProviderKind,
@@ -93,7 +98,7 @@ export async function collectMedia(
   const chunks: Uint8Array[] = [];
   for await (const chunk of stream) {
     size += chunk.length;
-    if (size > MAX_MEDIA_BYTES) throw failed();
+    if (size > MAX_MEDIA_BYTES) throw unavailable();
     chunks.push(chunk);
   }
   if (!size) throw failed();
@@ -111,7 +116,7 @@ export async function downloadMediaUrl(
 ): Promise<MediaFile> {
   try {
     let current = new URL(url);
-    const timeout = AbortSignal.timeout(45_000);
+    const timeout = AbortSignal.timeout(120_000);
     const signal = options.signal
       ? AbortSignal.any([options.signal, timeout])
       : timeout;
@@ -137,10 +142,13 @@ export async function downloadMediaUrl(
         continue;
       }
       if (
-        !response.ok ||
-        Number(response.headers.get("content-length")) > MAX_MEDIA_BYTES ||
-        !response.body
+        [404, 410].includes(response.status) ||
+        Number(response.headers.get("content-length")) > MAX_MEDIA_BYTES
       ) {
+        await response.body?.cancel();
+        throw unavailable();
+      }
+      if (!response.ok || !response.body) {
         await response.body?.cancel();
         throw failed();
       }
@@ -165,7 +173,9 @@ export async function downloadMediaUrl(
       return await collectMedia(response.body, mimeType, options.fileName);
     }
     throw failed();
-  } catch {
+  } catch (error) {
+    if (error instanceof AdapterError && error.code === "UNSUPPORTED_OPERATION")
+      throw error;
     throw failed();
   }
 }

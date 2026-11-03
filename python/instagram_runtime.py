@@ -237,7 +237,7 @@ class InstagramRuntime:
                     return {'url': details['url'], 'mimeType': details['mimeType']}
             cursor = page.get('oldest_cursor')
             if not cursor:
-                raise BridgeError('PROVIDER_ERROR')
+                raise BridgeError('UNSUPPORTED_OPERATION')
             if cursor in cursors:
                 raise BridgeError('UNSUPPORTED_OPERATION')
             cursors.add(cursor)

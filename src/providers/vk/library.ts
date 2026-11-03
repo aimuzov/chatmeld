@@ -381,7 +381,11 @@ class VkDriver implements ProviderDriver {
               );
             })
           : message?.attachments?.[Number(value.index)];
-      if (!attachment) throw new Error("MEDIA_NOT_FOUND");
+      if (!attachment)
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Сообщение или медиа VK больше недоступно.",
+        );
       let url: string | undefined,
         mimeType: string | undefined,
         fileName: string | undefined;
@@ -418,7 +422,11 @@ class VkDriver implements ProviderDriver {
           );
       } else if (attachment.type === "video") {
         const video = attachment.video;
-        if (!video) throw new Error("MEDIA_NOT_FOUND");
+        if (!video)
+          throw new AdapterError(
+            "UNSUPPORTED_OPERATION",
+            "Сообщение или медиа VK больше недоступно.",
+          );
         const response = await this.vk!.api.video.get({
           videos: [
             `${video.owner_id}_${video.id}${video.access_key ? "_" + video.access_key : ""}`,
@@ -442,7 +450,11 @@ class VkDriver implements ProviderDriver {
           "UNSUPPORTED_OPERATION",
           "Это вложение VK не поддерживает скачивание.",
         );
-      if (!url) throw new Error("MEDIA_NOT_FOUND");
+      if (!url)
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Сообщение или медиа VK больше недоступно.",
+        );
       const host = new URL(url).hostname;
       const allowed = [
         "userapi.com",

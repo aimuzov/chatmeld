@@ -70,7 +70,7 @@ test("media download is bounded while streaming and cancels the producer", async
     }
   }
   await assert.rejects(collectMedia(chunks(), "video/mp4"), {
-    code: "PROVIDER_ERROR",
+    code: "UNSUPPORTED_OPERATION",
   });
   assert.equal(closed, true);
 });
@@ -125,4 +125,36 @@ test("media returns actual CDN image MIME rather than guessed attachment type", 
     { mimeType: "image/jpeg" },
   );
   assert.equal(result.mimeType, "image/png");
+});
+
+test("oversized provider media is unsupported without starting a download", async (t) => {
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(new Uint8Array([1]), {
+        headers: {
+          "content-type": "video/mp4",
+          "content-length": String(MAX_MEDIA_BYTES + 1),
+        },
+      }),
+  );
+  await assert.rejects(
+    downloadMediaUrl("https://cdn.example.com/large", ["example.com"]),
+    { code: "UNSUPPORTED_OPERATION" },
+  );
+});
+
+test("deleted provider media is unavailable without a connection error", async (t) => {
+  for (const status of [404, 410]) {
+    t.mock.method(
+      globalThis,
+      "fetch",
+      async () => new Response(null, { status }),
+    );
+    await assert.rejects(
+      downloadMediaUrl("https://cdn.example.com/deleted", ["example.com"]),
+      { code: "UNSUPPORTED_OPERATION" },
+    );
+  }
 });

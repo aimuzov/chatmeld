@@ -431,21 +431,21 @@ const removeState = adapter.onState((state) => {
 });
 ```
 
-| Code                    | Meaning                                                                                |
-| ----------------------- | -------------------------------------------------------------------------------------- |
-| `INVALID_OPTIONS`       | Invalid configuration, missing handler or empty message.                               |
-| `INVALID_STATE`         | A connection is active, starting or shutting down.                                     |
-| `AUTH_REQUIRED`         | No usable session or no active connection.                                             |
-| `AUTH_CANCELLED`        | Operation cancelled by signal or shutdown.                                             |
-| `AUTH_TIMEOUT`          | Authorization exceeded three minutes.                                                  |
-| `INVALID_CHALLENGE`     | Unknown, foreign, expired or already answered challenge.                               |
-| `INVALID_RESPONSE`      | Empty, over 4096 characters or failing the supplied pattern. The challenge stays open. |
-| `STORAGE_ERROR`         | Reading or committing session storage failed.                                          |
-| `PROVIDER_ERROR`        | Provider operation failed, including a connection timeout.                             |
-| `HANDLER_ERROR`         | Message, state or authorization-event handler failed.                                  |
-| `QUEUE_OVERFLOW`        | The incoming message queue reached its limit of 100.                                   |
-| `UNSUPPORTED_OPERATION` | The provider does not support this format or operation; the connection remains usable. |
-| `DISCONNECTED`          | Provider connection ended.                                                             |
+| Code                    | Meaning                                                                                 |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| `INVALID_OPTIONS`       | Invalid configuration, missing handler or empty message.                                |
+| `INVALID_STATE`         | A connection is active, starting or shutting down.                                      |
+| `AUTH_REQUIRED`         | No usable session or no active connection.                                              |
+| `AUTH_CANCELLED`        | Operation cancelled by signal or shutdown.                                              |
+| `AUTH_TIMEOUT`          | Authorization exceeded three minutes.                                                   |
+| `INVALID_CHALLENGE`     | Unknown, foreign, expired or already answered challenge.                                |
+| `INVALID_RESPONSE`      | Empty, over 4096 characters or failing the supplied pattern. The challenge stays open.  |
+| `STORAGE_ERROR`         | Reading or committing session storage failed.                                           |
+| `PROVIDER_ERROR`        | Provider operation failed, including a connection timeout.                              |
+| `HANDLER_ERROR`         | Message, state or authorization-event handler failed.                                   |
+| `QUEUE_OVERFLOW`        | The incoming message queue reached its limit of 100.                                    |
+| `UNSUPPORTED_OPERATION` | Unsupported format, operation or unavailable attachment; the connection remains usable. |
+| `DISCONNECTED`          | Provider connection ended.                                                              |
 
 ## Boundaries
 
