@@ -75,7 +75,7 @@ const removeState = adapter.onState((state) => {
   if (state.state === "error") console.error(state.error);
 });
 const removeMessages = adapter.onMessage(async (message) => {
-  console.log(JSON.stringify(message));
+  console.log(message.messageId);
 });
 
 try {
