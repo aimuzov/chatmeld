@@ -314,6 +314,7 @@ class TelegramDriver implements ProviderDriver {
       );
     if (!(await this.listChats()).some((chat) => chat.id === value.chatId))
       throw new AdapterError("INVALID_OPTIONS", "Чат Telegram не найден.");
+    let exceededLimit = false;
     try {
       const client = this.ready();
       const messages = await client.getMessages(value.chatId, {
@@ -368,6 +369,7 @@ class TelegramDriver implements ProviderDriver {
             BigInt(received.toString()) > BigInt(MAX_MEDIA_BYTES) ||
             BigInt(total.toString()) > BigInt(MAX_MEDIA_BYTES)
           ) {
+            exceededLimit = true;
             control.abort();
             throw new Error("MEDIA_TOO_LARGE");
           }
@@ -380,14 +382,23 @@ class TelegramDriver implements ProviderDriver {
           "UNSUPPORTED_OPERATION",
           "Медиа Telegram больше недоступно.",
         );
-      if (!(data instanceof Uint8Array) || data.length > MAX_MEDIA_BYTES)
-        throw new Error("INVALID_MEDIA");
+      if (data instanceof Uint8Array && data.length > MAX_MEDIA_BYTES)
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Медиа Telegram превышает допустимый размер.",
+        );
+      if (!(data instanceof Uint8Array)) throw new Error("INVALID_MEDIA");
       return {
         data: new Uint8Array(data),
         mimeType: attachment.mimeType ?? "application/octet-stream",
         ...(attachment.fileName ? { fileName: attachment.fileName } : {}),
       };
     } catch (error) {
+      if (exceededLimit)
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Медиа Telegram превышает допустимый размер.",
+        );
       if (error instanceof AdapterError) throw error;
       if (
         error instanceof FileReferenceExpiredError ||

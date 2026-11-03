@@ -551,12 +551,33 @@ test("Telegram stale media references leave the connected adapter usable", async
           ]
         : [tgPhoto()],
   );
-  t.mock.method(TelegramClient.prototype, "downloadMedia", async () => {
-    if (mode === "expired")
-      throw new FileReferenceExpiredError({ capture: 0, request: undefined });
-    if (mode === "sdk-failure") throw Error("SECRET NETWORK ERROR");
-    return undefined;
-  });
+  t.mock.method(
+    TelegramClient.prototype,
+    "downloadMedia",
+    async (
+      _message: Parameters<TelegramClient["downloadMedia"]>[0],
+      options: Parameters<TelegramClient["downloadMedia"]>[1],
+    ) => {
+      if (mode === "oversized-progress") {
+        try {
+          const progress =
+            options && typeof options === "object"
+              ? options.progressCallback
+              : undefined;
+          await progress?.(
+            bigInt(MAX_MEDIA_BYTES + 1),
+            bigInt(MAX_MEDIA_BYTES + 1),
+          );
+        } catch {}
+        throw Error("SDK ABORTED");
+      }
+      if (mode === "oversized-return") return Buffer.alloc(MAX_MEDIA_BYTES + 1);
+      if (mode === "expired")
+        throw new FileReferenceExpiredError({ capture: 0, request: undefined });
+      if (mode === "sdk-failure") throw Error("SECRET NETWORK ERROR");
+      return undefined;
+    },
+  );
   const c = context();
   await writeStored(c.storage, "telegram/session", { session: "" });
   const driver = createTelegramDriver({
@@ -585,6 +606,8 @@ test("Telegram stale media references leave the connected adapter usable", async
       "attachment-missing",
       "file-missing",
       "expired",
+      "oversized-progress",
+      "oversized-return",
     ]) {
       await assert.rejects(
         adapter.downloadMedia(reference),

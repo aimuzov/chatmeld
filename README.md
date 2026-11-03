@@ -252,7 +252,9 @@ Example `Message`:
 }
 ```
 
-All IDs are strings. `senderId`, `displayName` and `username` are optional; `direction` is typed as `"incoming" | "outgoing"`. `sentAt` is a timestamp string. `attachments` is an array of `{ kind: string }`, without file contents. Deduplicate by provider, account, chat and message ID.
+All IDs are strings. `senderId`, `displayName` and `username` are optional; `direction` is typed as `"incoming" | "outgoing"`. `sentAt` is a timestamp string.
+
+`attachments` contains metadata and server-side download references, including `mimeType`, `fileName` and `size` when available. Fetch file bytes separately. Deduplicate by provider, account, chat and message ID.
 
 ### Recent messages
 
