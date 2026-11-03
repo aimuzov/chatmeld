@@ -284,6 +284,25 @@ export class Adapter implements MessagingAdapter {
   listChats() {
     return this.perform((driver) => driver.listChats());
   }
+  listMessages(chatId: string, options: { limit?: number } = {}) {
+    const limit = options.limit ?? 100;
+    if (
+      !chatId?.trim() ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    )
+      return Promise.reject(
+        new AdapterError(
+          "INVALID_OPTIONS",
+          "Нужны ID чата и лимит от 1 до 100.",
+        ),
+      );
+    return this.perform(
+      (driver) =>
+        driver.listMessages?.(chatId, { limit }) ?? Promise.resolve([]),
+    );
+  }
   sendMessage(chatId: string, text: string) {
     if (
       typeof chatId !== "string" ||
