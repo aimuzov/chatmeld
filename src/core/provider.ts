@@ -24,6 +24,7 @@ export interface MediaFile {
 export interface MediaInput extends MediaFile {
   kind: "photo" | "video" | "audio";
   caption?: string;
+  voice?: boolean;
 }
 
 export interface Message {

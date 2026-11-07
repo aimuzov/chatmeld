@@ -8,6 +8,7 @@ import {
 } from "vk-io";
 import type {
   MediaInput,
+  Message,
   MediaFile,
   Avatar,
   AvatarTarget,
@@ -21,6 +22,7 @@ import { AdapterError, abortable } from "../../library/errors.js";
 import {
   MAX_MEDIA_BYTES,
   decodeMediaReference,
+  encodeMediaReference,
   downloadMediaUrl,
   mediaFileName,
   validateMedia,
@@ -34,7 +36,7 @@ import {
 import { CancellableVkApi } from "./api.js";
 import { loginWithVkQr } from "./qr.js";
 
-function vkError(error: unknown): Error {
+function vkError(error: unknown, communityId?: number): Error {
   if (error instanceof AdapterError) return error;
   const code = (error as { code?: number } | undefined)?.code;
   if (code === 5)
@@ -45,7 +47,9 @@ function vkError(error: unknown): Error {
   if ([7, 15, 27, 1051].includes(code ?? 0))
     return new AdapterError(
       "PROVIDER_ERROR",
-      `VK отказал в доступе (код ${code}). Нужен пользовательский токен приложения с доступом к личным сообщениям. Токен сообщества или обычный VK ID для этого не подходит.`,
+      communityId
+        ? `VK отказал в доступе (код ${code}). Проверьте ID сообщества, права ключа на сообщения и настройки Long Poll.`
+        : `VK отказал в доступе (код ${code}). Нужен пользовательский токен приложения с доступом к личным сообщениям. Токен сообщества или обычный VK ID для этого не подходит.`,
     );
   if (typeof code === "number")
     return new AdapterError("PROVIDER_ERROR", `Ошибка VK API (код ${code}).`);
@@ -55,8 +59,11 @@ function vkError(error: unknown): Error {
   );
 }
 
-export function createVkDriver(options: { accountId: string }): ProviderDriver {
-  return new VkDriver(options.accountId);
+export function createVkDriver(options: {
+  accountId: string;
+  communityId?: number;
+}): ProviderDriver {
+  return new VkDriver(options.accountId, options.communityId);
 }
 
 class VkDriver implements ProviderDriver {
@@ -67,7 +74,23 @@ class VkDriver implements ProviderDriver {
   private removeAbort?: () => void;
   private fault?: Error;
 
-  constructor(private accountId: string) {}
+  constructor(
+    private accountId: string,
+    private communityId?: number,
+  ) {
+    if (
+      communityId !== undefined &&
+      (!Number.isSafeInteger(communityId) || communityId <= 0)
+    )
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Некорректный ID сообщества VK.",
+      );
+  }
+
+  private get groupParams() {
+    return this.communityId === undefined ? {} : { group_id: this.communityId };
+  }
 
   private async open(
     context: DriverContext,
@@ -88,29 +111,41 @@ class VkDriver implements ProviderDriver {
             "INVALID_STATE",
             "Не задан канал авторизации VK.",
           );
-        token = await loginWithVkQr({
-          signal: this.stop.signal,
-          onQr: (value) => context.auth!.qr(value),
-          requestCode: (signal) =>
-            abortable(
-              context.auth!.challenge({
-                kind: "code",
-                prompt: "Код подтверждения VK",
-                pattern: "^\\d{6}$",
-              }),
-              signal,
-            ),
-          onStatus: (status) =>
-            context.auth!.progress(
-              status === "code-entered"
-                ? "Ожидается подтверждение VK"
-                : "Проверяется доступ к сообщениям VK",
-            ),
-        });
+        token = this.communityId
+          ? (
+              await abortable(
+                context.auth.challenge({
+                  kind: "password",
+                  prompt: "Ключ доступа сообщества ВК",
+                }),
+                this.stop.signal,
+              )
+            ).trim()
+          : await loginWithVkQr({
+              signal: this.stop.signal,
+              onQr: (value) => context.auth!.qr(value),
+              requestCode: (signal) =>
+                abortable(
+                  context.auth!.challenge({
+                    kind: "code",
+                    prompt: "Код подтверждения VK",
+                    pattern: "^\\d{6}$",
+                  }),
+                  signal,
+                ),
+              onStatus: (status) =>
+                context.auth!.progress(
+                  status === "code-entered"
+                    ? "Ожидается подтверждение VK"
+                    : "Проверяется доступ к сообщениям VK",
+                ),
+            });
       } else {
         const stored = await readStored<{ token: string }>(
           context.storage,
-          "vk/token",
+          this.communityId
+            ? `vk/community/${this.communityId}/token`
+            : "vk/token",
         );
         if (!stored)
           throw new AdapterError("AUTH_REQUIRED", "Нет сохранённой сессии VK.");
@@ -130,12 +165,34 @@ class VkDriver implements ProviderDriver {
       );
       const upload = new Upload({ api });
       this.vk = { api, upload, updates: new Updates({ api, upload }) };
-      const users = await api.users.get({});
-      if (users.length !== 1 || !users[0]?.id)
-        throw new AdapterError("AUTH_REQUIRED", "Для VK нужен личный аккаунт.");
-      await api.messages.getConversations({ count: 1 });
+      if (this.communityId) {
+        const { groups } = await api.groups.getById({});
+        if (groups[0]?.id !== this.communityId)
+          throw new AdapterError(
+            "AUTH_REQUIRED",
+            "Ключ не принадлежит указанному сообществу ВК.",
+          );
+      } else {
+        const users = await api.users.get({});
+        if (users.length !== 1 || !users[0]?.id)
+          throw new AdapterError(
+            "AUTH_REQUIRED",
+            "Для VK нужен личный аккаунт.",
+          );
+      }
+      await api.messages.getConversations({ count: 1, ...this.groupParams });
+      const communityServer = this.communityId
+        ? await api.groups.getLongPollServer({ group_id: this.communityId })
+        : undefined;
       context.signal.throwIfAborted();
-      if (authorize) await writeStored(context.storage, "vk/token", { token });
+      if (authorize)
+        await writeStored(
+          context.storage,
+          this.communityId
+            ? `vk/community/${this.communityId}/token`
+            : "vk/token",
+          { token },
+        );
       this.vk.updates.on(
         "message_new",
         async (messageContext: MessageContext) => {
@@ -168,17 +225,19 @@ class VkDriver implements ProviderDriver {
         });
       });
       const signal = this.stop.signal;
-      this.polling = this.poll(signal).catch((error: unknown) => {
-        if (!signal.aborted) {
-          this.fault = vkError(error);
-          this.stop.abort();
-          context.onError(this.fault);
-        }
-      });
+      this.polling = this.poll(signal, communityServer).catch(
+        (error: unknown) => {
+          if (!signal.aborted) {
+            this.fault = vkError(error, this.communityId);
+            this.stop.abort();
+            context.onError(this.fault);
+          }
+        },
+      );
     } catch (error) {
       await this.disconnect();
       if (context.signal.aborted) context.signal.throwIfAborted();
-      throw vkError(error);
+      throw vkError(error, this.communityId);
     }
   }
 
@@ -201,6 +260,7 @@ class VkDriver implements ProviderDriver {
     try {
       for (let offset = 0; ; offset += 200) {
         const page = await this.vk!.api.messages.getConversations({
+          ...this.groupParams,
           offset,
           count: 200,
           extended: 1,
@@ -212,7 +272,7 @@ class VkDriver implements ProviderDriver {
       }
       return [...chats.values()];
     } catch (error) {
-      throw vkError(error);
+      throw vkError(error, this.communityId);
     }
   }
 
@@ -265,7 +325,7 @@ class VkDriver implements ProviderDriver {
         this.stop.signal,
       );
     } catch (error) {
-      throw vkError(error);
+      throw vkError(error, this.communityId);
     }
   }
 
@@ -275,6 +335,7 @@ class VkDriver implements ProviderDriver {
     await this.requireAuthorization();
     try {
       const page = await this.vk!.api.messages.getHistory({
+        ...this.groupParams,
         peer_id: Number(chatId),
         count: options.limit ?? 100,
         extended: 1,
@@ -309,15 +370,23 @@ class VkDriver implements ProviderDriver {
         ),
       }));
     } catch (error) {
-      throw vkError(error);
+      throw vkError(error, this.communityId);
     }
   }
 
   async sendMedia(
     chatId: string,
     media: MediaInput,
-  ): Promise<{ externalId: string }> {
+  ): Promise<{ externalId: string; attachments?: Message["attachments"] }> {
     validateMedia(media);
+    if (
+      media.voice &&
+      (media.kind !== "audio" || media.mimeType !== "audio/ogg")
+    )
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Для голосового ВК нужен звук в формате Ogg.",
+      );
     const peer = Number(chatId);
     if (!/^-?\d+$/.test(chatId) || !Number.isSafeInteger(peer) || !peer)
       throw new AdapterError("INVALID_OPTIONS", "Некорректный ID чата VK.");
@@ -332,18 +401,21 @@ class VkDriver implements ProviderDriver {
       const attachment =
         media.kind === "photo"
           ? await upload.messagePhoto({ peer_id: peer, source })
-          : media.kind === "video"
-            ? await upload.video({
-                source,
-                is_private: 1,
-                name: mediaFileName(media),
-              })
-            : await upload.messageDocument({
-                peer_id: peer,
-                source,
-                title: mediaFileName(media),
-              });
+          : media.voice
+            ? await upload.audioMessage({ peer_id: peer, source })
+            : media.kind === "video"
+              ? await upload.video({
+                  source,
+                  is_private: 1,
+                  name: mediaFileName(media),
+                })
+              : await upload.messageDocument({
+                  peer_id: peer,
+                  source,
+                  title: mediaFileName(media),
+                });
       const [result] = await this.vk!.api.messages.send({
+        ...this.groupParams,
         peer_ids: [peer],
         random_id: getRandomId(),
         attachment: attachment.toString(),
@@ -353,9 +425,23 @@ class VkDriver implements ProviderDriver {
         throw new APIError({ ...result.error, request_params: [] });
       if (!result?.conversation_message_id)
         throw new Error("SEND_NOT_CONFIRMED");
-      return { externalId: `${chatId}:${result.conversation_message_id}` };
+      return {
+        externalId: `${chatId}:${result.conversation_message_id}`,
+        ...(this.communityId && {
+          attachments: [
+            {
+              kind: media.kind,
+              reference: encodeMediaReference("vk", this.accountId, {
+                chatId,
+                conversationMessageId: result.conversation_message_id,
+                index: 0,
+              }),
+            },
+          ],
+        }),
+      };
     } catch (error) {
-      throw vkError(error);
+      throw vkError(error, this.communityId);
     }
   }
 
@@ -378,6 +464,7 @@ class VkDriver implements ProviderDriver {
     await this.requireAuthorization();
     try {
       const page = await this.vk!.api.messages.getByConversationMessageId({
+        ...this.groupParams,
         peer_id: Number(value.chatId),
         conversation_message_ids: [Number(value.conversationMessageId)],
       });
@@ -413,12 +500,9 @@ class VkDriver implements ProviderDriver {
         )[0]?.url;
         mimeType = "image/jpeg";
       } else if (attachment.type === "audio_message") {
-        url =
-          attachment.audio_message?.link_ogg ??
-          attachment.audio_message?.link_mp3;
-        mimeType = attachment.audio_message?.link_ogg
-          ? "audio/ogg"
-          : "audio/mpeg";
+        const { link_ogg: ogg, link_mp3: mp3 } = attachment.audio_message ?? {};
+        url = this.communityId ? mp3 || ogg : ogg || mp3;
+        mimeType = url === ogg ? "audio/ogg" : "audio/mpeg";
       } else if (attachment.type === "audio") {
         url = attachment.audio?.url;
         mimeType = "audio/mpeg";
@@ -489,7 +573,7 @@ class VkDriver implements ProviderDriver {
         fileName,
       });
     } catch (error) {
-      throw vkError(error);
+      throw vkError(error, this.communityId);
     }
   }
 
@@ -507,6 +591,7 @@ class VkDriver implements ProviderDriver {
     await this.requireAuthorization();
     try {
       const [message] = await this.vk!.api.messages.send({
+        ...this.groupParams,
         peer_ids: [Number(chatId)],
         random_id: getRandomId(),
         message: text,
@@ -517,18 +602,28 @@ class VkDriver implements ProviderDriver {
         throw new Error("SEND_NOT_CONFIRMED");
       return { externalId: `${chatId}:${message.conversation_message_id}` };
     } catch (error) {
-      throw vkError(error);
+      throw vkError(error, this.communityId);
     }
   }
 
-  private async poll(signal: AbortSignal): Promise<void> {
+  private async poll(
+    signal: AbortSignal,
+    initial?: { server: string; key: string; ts: string | number },
+  ): Promise<void> {
     let server: { url: URL; ts: string } | undefined;
     let resets = 0;
     while (!signal.aborted) {
       if (!server) {
-        const value = await this.vk!.api.messages.getLongPollServer({
-          lp_version: 19,
-        });
+        const value =
+          initial ??
+          (this.communityId
+            ? await this.vk!.api.groups.getLongPollServer({
+                group_id: this.communityId,
+              })
+            : await this.vk!.api.messages.getLongPollServer({
+                lp_version: 19,
+              }));
+        initial = undefined;
         const url = new URL(
           value.server.startsWith("https://")
             ? value.server
@@ -539,8 +634,7 @@ class VkDriver implements ProviderDriver {
           act: "a_check",
           key: value.key,
           wait: "25",
-          mode: "202",
-          version: "19",
+          ...(this.communityId ? {} : { mode: "202", version: "19" }),
         }).toString();
         server = { url, ts: String(value.ts) };
       }
@@ -553,7 +647,7 @@ class VkDriver implements ProviderDriver {
       const data = (await response.json()) as {
         ts?: number | string;
         failed?: number;
-        updates?: unknown[][];
+        updates?: unknown[];
       };
       if (data.failed === 2 || data.failed === 3) {
         if (++resets > 3) throw new Error("LONG_POLL_RESTART_LIMIT");
@@ -567,7 +661,11 @@ class VkDriver implements ProviderDriver {
           throw new Error("LONG_POLL_INVALID_UPDATES");
         for (const update of data.updates) {
           if (signal.aborted) return;
-          await this.vk!.updates.handlePollingUpdate(update);
+          if (this.communityId)
+            await this.vk!.updates.handleWebhookUpdate(
+              update as Record<string, unknown>,
+            );
+          else await this.vk!.updates.handlePollingUpdate(update as unknown[]);
         }
         resets = 0;
       }

@@ -68,15 +68,17 @@ export interface DriverContext {
   onError(error: Error): void;
 }
 
+type MediaSendResult = {
+  externalId: string;
+  attachments?: Message["attachments"];
+};
+
 export interface ProviderDriver {
   connect(context: DriverContext): Promise<void>;
   authorize(context: DriverContext): Promise<void>;
   listChats(): Promise<Chat[]>;
   getAvatar?(target: AvatarTarget): Promise<Avatar | undefined>;
-  sendMedia?(
-    chatId: string,
-    media: MediaInput,
-  ): Promise<{ externalId: string }>;
+  sendMedia?(chatId: string, media: MediaInput): Promise<MediaSendResult>;
   downloadMedia?(reference: string): Promise<MediaFile>;
   listMessages?(
     chatId: string,
@@ -96,7 +98,7 @@ export type AdapterOptions = {
   | { provider: "telegram"; apiId: number; apiHash: string }
   | { provider: "max"; pythonCommand?: string }
   | { provider: "whatsapp" }
-  | { provider: "vk" }
+  | { provider: "vk"; communityId?: number }
   | { provider: "instagram"; username: string; pythonCommand?: string }
 );
 
@@ -118,7 +120,7 @@ export interface MessagingAdapter {
   respondToChallenge(response: { challengeId: string; value: string }): void;
   listChats(): Promise<Chat[]>;
   getAvatar(target: AvatarTarget): Promise<Avatar | undefined>;
-  sendMedia(chatId: string, media: MediaInput): Promise<{ externalId: string }>;
+  sendMedia(chatId: string, media: MediaInput): Promise<MediaSendResult>;
   downloadMedia(reference: string): Promise<MediaFile>;
   listMessages?(
     chatId: string,
