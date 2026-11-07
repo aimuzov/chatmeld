@@ -171,7 +171,9 @@ export function createWhatsAppDriver(options: {
     abort = () => fail(new Error("Подключение WhatsApp отменено."));
     context.signal.addEventListener("abort", abort, { once: true });
     try {
-      await request(authorize ? "authorize" : "connect", options);
+      await request(authorize ? "authorize" : "connect", {
+        accountId: options.accountId,
+      });
       await authQueue;
     } catch (error) {
       await driver.disconnect().catch(() => {});
