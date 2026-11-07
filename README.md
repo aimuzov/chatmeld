@@ -458,6 +458,8 @@ const removeState = adapter.onState((state) => {
 
 Subscribe with `adapter.onReceipt?.(handler)`. Handlers may be async; the returned function unsubscribes. The event contains `provider`, `accountId`, `chatId` and `status` (`delivered` or `read`). It targets exact `messageIds`, a numeric `throughMessageId` watermark or a `throughSentAt` timestamp watermark. Apply watermarks only to outgoing messages in the same account and chat. Save them even when the message has not been stored yet, and never downgrade a read message to delivered.
 
+Telegram and VK encode `throughMessageId` as `chatId:messageId`. Compare the numeric suffix within the same chat.
+
 WhatsApp reports delivery and read acknowledgements in direct chats. Telegram, VK and MAX report private-chat read watermarks; Telegram has no separate delivered-to-device status. Group acknowledgements are omitted because one participant does not confirm the whole group. Receipts are live events, not a backfill of confirmations missed while disconnected. MAX send results include the server message `sentAt` timestamp for matching its read watermark.
 
 Receipt and message handlers share a queue of 100 events. An overflowing queue or a failed handler closes the connection.
