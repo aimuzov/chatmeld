@@ -188,7 +188,21 @@ class TelegramDriver implements ProviderDriver {
     };
     client.addEventHandler(receive, builder);
     this.removeUpdates = () => client.removeEventHandler(receive, builder);
-    const changed = async () => {
+    const changed = async (update: Api.TypeUpdate) => {
+      if (this.context!.signal.aborted || this.client !== client) return;
+      if (
+        update instanceof Api.UpdateReadHistoryOutbox &&
+        update.peer instanceof Api.PeerUser
+      ) {
+        const chatId = utils.getPeerId(update.peer);
+        this.context!.onReceipt?.({
+          provider: "telegram",
+          accountId: this.options.accountId,
+          chatId,
+          status: "read",
+          throughMessageId: `${chatId}:${update.maxId}`,
+        });
+      }
       this.queueSession();
       await this.writes.catch(() => undefined);
     };

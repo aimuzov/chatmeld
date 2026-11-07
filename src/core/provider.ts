@@ -35,6 +35,7 @@ export interface Message {
   direction: "incoming" | "outgoing";
   text: string;
   sentAt: string;
+  status?: "sent" | "delivered" | "read";
   attachments: MediaAttachment[];
 }
 

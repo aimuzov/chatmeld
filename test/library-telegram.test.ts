@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import bigInt from "big-integer";
 import { Api, TelegramClient } from "teleproto";
+import { Raw } from "teleproto/events";
 import { StringSession } from "teleproto/sessions";
 import { AuthFlow } from "../src/library/auth.js";
 import { readStored, writeStored } from "../src/library/storage.js";
@@ -261,4 +262,59 @@ test("Telegram history restores a private channel entity before requesting messa
   } finally {
     await f.driver.disconnect();
   }
+});
+
+test("Telegram publishes read watermarks for private outbox updates", async (t) => {
+  const f = fixture();
+  await writeStored(f.storage, "telegram/session", { session: "" });
+  t.mock.method(TelegramClient.prototype, "connect", async () => true);
+  t.mock.method(
+    TelegramClient.prototype,
+    "checkAuthorization",
+    async () => true,
+  );
+  t.mock.method(TelegramClient.prototype, "getMe", async () => ({
+    bot: false,
+  }));
+  t.mock.method(TelegramClient.prototype, "destroy", async () => {});
+  let raw!: (update: Api.TypeUpdate) => Promise<void>;
+  t.mock.method(
+    TelegramClient.prototype,
+    "addEventHandler",
+    (handler: typeof raw, builder: unknown) => {
+      if (builder instanceof Raw) raw = handler;
+    },
+  );
+  t.mock.method(TelegramClient.prototype, "removeEventHandler", () => {});
+  const receipts: unknown[] = [];
+  f.context.onReceipt = (receipt) => {
+    receipts.push(receipt);
+  };
+  await f.driver.connect(f.context);
+  await raw(
+    new Api.UpdateReadHistoryOutbox({
+      peer: new Api.PeerUser({ userId: bigInt(42) }),
+      maxId: 17,
+      pts: 1,
+      ptsCount: 1,
+    }),
+  );
+  await raw(
+    new Api.UpdateReadHistoryOutbox({
+      peer: new Api.PeerChat({ chatId: bigInt(42) }),
+      maxId: 20,
+      pts: 1,
+      ptsCount: 1,
+    }),
+  );
+  assert.deepEqual(receipts, [
+    {
+      provider: "telegram",
+      accountId: "one",
+      chatId: "42",
+      status: "read",
+      throughMessageId: "42:17",
+    },
+  ]);
+  await f.driver.disconnect();
 });

@@ -48,11 +48,23 @@ export interface AuthChannel {
   progress(message: string): void;
 }
 
+export type MessageReceipt = {
+  provider: ProviderKind;
+  accountId: string;
+  chatId: string;
+  status: "delivered" | "read";
+} & (
+  | { messageIds: string[] }
+  | { throughMessageId: string }
+  | { throughSentAt: string }
+);
+
 export interface DriverContext {
   storage: SessionStorage;
   signal: AbortSignal;
   auth?: AuthChannel;
   onMessage(message: Message): void;
+  onReceipt?(receipt: MessageReceipt): void;
   onError(error: Error): void;
 }
 
@@ -70,7 +82,10 @@ export interface ProviderDriver {
     chatId: string,
     options?: { limit?: number },
   ): Promise<Message[]>;
-  sendMessage(chatId: string, text: string): Promise<{ externalId: string }>;
+  sendMessage(
+    chatId: string,
+    text: string,
+  ): Promise<{ externalId: string; sentAt?: string }>;
   disconnect(): Promise<void>;
 }
 
@@ -109,8 +124,14 @@ export interface MessagingAdapter {
     chatId: string,
     options?: { limit?: number },
   ): Promise<Message[]>;
-  sendMessage(chatId: string, text: string): Promise<{ externalId: string }>;
+  sendMessage(
+    chatId: string,
+    text: string,
+  ): Promise<{ externalId: string; sentAt?: string }>;
   onMessage(handler: (message: Message) => void | Promise<void>): () => void;
+  onReceipt?(
+    handler: (receipt: MessageReceipt) => void | Promise<void>,
+  ): () => void;
   onState(handler: (state: AdapterState) => void): () => void;
   disconnect(): Promise<void>;
 }

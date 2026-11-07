@@ -6,10 +6,11 @@ import mimetypes
 import re
 import signal
 import sys
+from datetime import datetime, timezone
 
 from pymax import ExtraConfig, QrAuthFlow, WebClient, Photo, Video, File
 from chats import list_named_chats
-from normalize import normalize_message
+from normalize import normalize_message, normalize_read_receipt
 from library_store import RpcStore, StorageRpc
 
 OUTPUT = sys.stdout
@@ -96,6 +97,15 @@ class Bridge:
                     self.emit({"event": "message", "message": result})
             except Exception:
                 self.emit({"event": "fatal"})
+
+        @self.client.on_message_read()
+        async def read(event, client):
+            if not self.listening or self.closing or client.me is None:
+                return
+            chat = next((chat for chat in client.chats or [] if chat.id == event.chat_id), None)
+            receipt = normalize_read_receipt(event, self.account_id, client.me.contact.id, chat is not None and chat.type == "DIALOG")
+            if receipt is not None:
+                self.emit({"event": "receipt", "receipt": receipt})
 
         @self.client.on_disconnect()
         async def disconnected(*args, **kwargs):
@@ -207,7 +217,7 @@ class Bridge:
             chat_id = int(params["chatId"])
             await self.client.get_chat(chat_id)
             message = await self.client.send_message(chat_id=chat_id, text=params["text"])
-            return {"externalId": f"{chat_id}:{message.id}"}
+            return {"externalId": f"{chat_id}:{message.id}", "sentAt": datetime.fromtimestamp(message.time / 1000, timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")}
         raise RuntimeError("Unknown MAX method")
 
     async def close(self):

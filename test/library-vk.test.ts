@@ -103,3 +103,67 @@ test("VK restores, lists named chats, sends scoped IDs and cancels long polling"
   await f.driver.disconnect();
   assert.equal(aborted, true);
 });
+
+test("VK publishes private outgoing read watermarks from long polling", async (t) => {
+  const f = await fixture("test-token");
+  const receipts: unknown[] = [];
+  let received!: () => void;
+  const done = new Promise<void>((resolve) => {
+    received = resolve;
+  });
+  f.context.onReceipt = (receipt) => {
+    receipts.push(receipt);
+    received();
+  };
+  let first = true;
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async (url: string | URL | Request, options: RequestInit) => {
+      if (String(url).startsWith("https://lp.vk.ru/")) {
+        if (first) {
+          first = false;
+          return Response.json({
+            ts: "2",
+            updates: [
+              [10006, 42, 9],
+              [10007, 2000000001, 10],
+              [10007, 42, 17],
+            ],
+          });
+        }
+        options.signal!.throwIfAborted();
+        return new Promise<Response>((_resolve, reject) => {
+          options.signal!.addEventListener(
+            "abort",
+            () => reject(new Error("aborted")),
+            { once: true },
+          );
+        });
+      }
+      const method = String(url).split("/").at(-1);
+      if (method === "users.get")
+        return Response.json({ response: [{ id: 42 }] });
+      if (method === "messages.getLongPollServer")
+        return Response.json({
+          response: { server: "lp.vk.ru/test", key: "key", ts: "1" },
+        });
+      return Response.json({ response: { items: [], count: 0 } });
+    },
+  );
+  await f.driver.connect(f.context);
+  try {
+    await done;
+    assert.deepEqual(receipts, [
+      {
+        provider: "vk",
+        accountId: "one",
+        chatId: "42",
+        status: "read",
+        throughMessageId: "42:17",
+      },
+    ]);
+  } finally {
+    await f.driver.disconnect();
+  }
+});

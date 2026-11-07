@@ -81,6 +81,8 @@ port.on(
                         port.postMessage({ event: "progress", message }),
                     }
                   : undefined,
+              onReceipt: (receipt) =>
+                port.postMessage({ event: "receipt", receipt }),
               onMessage: (message) =>
                 port.postMessage({ event: "message", message }),
               onError: (error) =>

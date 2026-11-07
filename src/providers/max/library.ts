@@ -17,6 +17,7 @@ import type {
   Message,
   MediaInput,
   MediaFile,
+  MessageReceipt,
   ProviderDriver,
   SessionChange,
 } from "../../library/types.js";
@@ -204,6 +205,8 @@ class MaxDriver implements ProviderDriver {
         },
         () => this.fail(new Error("MAX challenge failed")),
       );
+    } else if (value.event === "receipt") {
+      this.context?.onReceipt?.(value.receipt as MessageReceipt);
     } else if (value.event === "message") {
       const message = value.message as Omit<Message, "attachments"> & {
         attachments: (Message["attachments"][number] & {
@@ -293,7 +296,10 @@ class MaxDriver implements ProviderDriver {
     );
   }
 
-  sendMessage(chatId: string, text: string): Promise<{ externalId: string }> {
+  sendMessage(
+    chatId: string,
+    text: string,
+  ): Promise<{ externalId: string; sentAt?: string }> {
     return this.request("send", { chatId, text });
   }
 

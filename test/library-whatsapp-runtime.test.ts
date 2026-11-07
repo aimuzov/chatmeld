@@ -110,3 +110,48 @@ test("WhatsApp revoked session requires a new authorization without exposing dis
   assert.equal((app.errors[0] as AdapterError).code, "AUTH_REQUIRED");
   await app.runtime.close();
 });
+
+test("WhatsApp reports delivery and read acknowledgements only for own direct messages", async () => {
+  const app = harness(async () => {});
+  const receipts: unknown[] = [];
+  app.context.onReceipt = (receipt) => receipts.push(receipt);
+  const opening = app.runtime.open(app.context, true);
+  await new Promise((resolve) => setImmediate(resolve));
+  app.events.emit("connection.update", { connection: "open" });
+  await opening;
+  for (const status of [2, 3, 4, 5])
+    app.events.emit("messages.update", [
+      {
+        key: { fromMe: true, remoteJid: "42@s.whatsapp.net", id: "m1" },
+        update: { status },
+      },
+    ]);
+  app.events.emit("messages.update", [
+    {
+      key: { fromMe: false, remoteJid: "42@s.whatsapp.net", id: "incoming" },
+      update: { status: 4 },
+    },
+    {
+      key: { fromMe: true, remoteJid: "group@g.us", id: "group" },
+      update: { status: 4 },
+    },
+  ]);
+  assert.deepEqual(
+    receipts,
+    ["delivered", "read", "read"].map((status) => ({
+      provider: "whatsapp",
+      accountId: "account",
+      chatId: "42@s.whatsapp.net",
+      messageIds: ["42@s.whatsapp.net:m1"],
+      status,
+    })),
+  );
+  await app.runtime.close();
+  app.events.emit("messages.update", [
+    {
+      key: { fromMe: true, remoteJid: "42@s.whatsapp.net", id: "late" },
+      update: { status: 4 },
+    },
+  ]);
+  assert.equal(receipts.length, 3);
+});

@@ -10,6 +10,7 @@ import type {
   AuthEvent,
   DriverContext,
   Message,
+  MessageReceipt,
   MessagingAdapter,
   ProviderDriver,
 } from "./types.js";
@@ -29,6 +30,9 @@ export class Adapter implements MessagingAdapter {
   private disconnecting?: Promise<void>;
   private storage?: SerializedStorage;
   private messages = new Set<(message: Message) => void | Promise<void>>();
+  private receipts = new Set<
+    (receipt: MessageReceipt) => void | Promise<void>
+  >();
   private states = new Set<(state: AdapterState) => void>();
   private queue = { delivery: Promise.resolve(), queued: 0 };
   private closingRequested = false;
@@ -116,14 +120,21 @@ export class Adapter implements MessagingAdapter {
     this.state({ state: "error", error: this.fault });
     void closing.catch(() => {});
   }
-  private receive = (message: Message): void => {
+  private receive = (message: Message): void =>
+    this.enqueue(this.messages, message);
+  private receiveReceipt = (receipt: MessageReceipt): void =>
+    this.enqueue(this.receipts, receipt);
+  private enqueue<T>(
+    handlers: Set<(value: T) => void | Promise<void>>,
+    value: T,
+  ): void {
     const control = this.control;
     const queue = this.queue;
     if (
       !control ||
       control.signal.aborted ||
       this.closingRequested ||
-      !this.messages.size
+      !handlers.size
     )
       return;
     if (queue.queued >= 100) {
@@ -139,7 +150,7 @@ export class Adapter implements MessagingAdapter {
     queue.delivery = queue.delivery
       .then(async () => {
         if (control.signal.aborted || control !== this.control) return;
-        for (const handler of this.messages) await handler(message);
+        for (const handler of handlers) await handler(value);
       })
       .catch(() => {
         if (control === this.control)
@@ -153,7 +164,7 @@ export class Adapter implements MessagingAdapter {
       .finally(() => {
         queue.queued--;
       });
-  };
+  }
 
   connect(options: { signal?: AbortSignal } = {}): Promise<void> {
     return this.start(undefined, options.signal);
@@ -210,6 +221,9 @@ export class Adapter implements MessagingAdapter {
     const auth = onEvent ? new AuthFlow(onEvent, control.signal) : undefined;
     this.auth = auth;
     const context: DriverContext = {
+      onReceipt: (receipt) => {
+        if (this.control === control) this.receiveReceipt(receipt);
+      },
       storage: this.storage,
       signal: control.signal,
       auth,
@@ -390,6 +404,14 @@ export class Adapter implements MessagingAdapter {
     this.messages.add(handler);
     return () => {
       this.messages.delete(handler);
+    };
+  }
+  onReceipt(
+    handler: (receipt: MessageReceipt) => void | Promise<void>,
+  ): () => void {
+    this.receipts.add(handler);
+    return () => {
+      this.receipts.delete(handler);
     };
   }
   onState(handler: (state: AdapterState) => void): () => void {

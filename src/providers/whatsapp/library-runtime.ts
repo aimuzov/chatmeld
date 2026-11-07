@@ -170,6 +170,37 @@ export class WhatsAppLibraryRuntime {
         ),
       );
     });
+    socket.ev.on("messages.update", (updates) => {
+      if (this.socket !== socket || this.stopped || this.fault) return;
+      for (const { key, update } of updates) {
+        if (!key.fromMe || !key.id) continue;
+        const status = update.status;
+        if (
+          status !== proto.WebMessageInfo.Status.DELIVERY_ACK &&
+          status !== proto.WebMessageInfo.Status.READ &&
+          status !== proto.WebMessageInfo.Status.PLAYED
+        )
+          continue;
+        const chatIds = new Set(
+          [key.remoteJid, key.remoteJidAlt]
+            .filter((id): id is string => !!id)
+            .map(jidNormalizedUser),
+        );
+        for (const chatId of chatIds) {
+          if (!isChatId(chatId) || chatId.endsWith("@g.us")) continue;
+          context.onReceipt?.({
+            provider: "whatsapp",
+            accountId: this.accountId,
+            chatId,
+            messageIds: [`${chatId}:${key.id}`],
+            status:
+              status === proto.WebMessageInfo.Status.DELIVERY_ACK
+                ? "delivered"
+                : "read",
+          });
+        }
+      }
+    });
     socket.ev.on("messaging-history.set", (data) => {
       this.catalog.chats(data.chats);
       this.catalog.contacts(data.contacts);

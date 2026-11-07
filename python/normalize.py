@@ -34,3 +34,13 @@ def normalize_message(message, account_id: str, own_id: int) -> dict | None:
         .isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         "attachments": attachments,
     }
+
+
+def normalize_read_receipt(event, account_id: str, own_id: int, is_direct: bool) -> dict | None:
+    if not is_direct or event.set_as_unread or event.user_id == own_id or event.mark <= 0:
+        return None
+    return {
+        "provider": "max", "accountId": account_id, "chatId": str(event.chat_id), "status": "read",
+        "throughSentAt": datetime.fromtimestamp(event.mark / 1000, timezone.utc)
+        .isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+    }

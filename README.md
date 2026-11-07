@@ -449,9 +449,15 @@ const removeState = adapter.onState((state) => {
 | `UNSUPPORTED_OPERATION` | Unsupported format, operation or unavailable attachment; the connection remains usable. |
 | `DISCONNECTED`          | Provider connection ended.                                                              |
 
+## Delivery receipts
+
+Subscribe with `adapter.onReceipt?.(handler)`. Handlers may be async; the returned function unsubscribes. The event contains `provider`, `accountId`, `chatId` and `status` (`delivered` or `read`). It targets exact `messageIds`, a numeric `throughMessageId` watermark or a `throughSentAt` timestamp watermark. Apply watermarks only to outgoing messages in the same account and chat. Save them even when the message has not been stored yet, and never downgrade a read message to delivered.
+
+WhatsApp reports delivery and read acknowledgements in direct chats. Telegram, VK and MAX report private-chat read watermarks; Telegram has no separate delivered-to-device status. Group acknowledgements are omitted because one participant does not confirm the whole group. Receipts are live events, not a backfill of confirmations missed while disconnected. MAX send results include the server message `sentAt` timestamp for matching its read watermark.
+
 ## Boundaries
 
-Chatmeld reads recent Telegram/VK/Instagram messages, downloads supported media and exposes avatars. Your project owns history and file storage. Reactions, read receipts, full synchronization, exactly-once delivery and a durable outbox are not implemented. The application decides whether to retry an uncertain send.
+Chatmeld reads recent Telegram/VK/Instagram messages, downloads supported media and exposes avatars. Your project owns history and file storage. Reactions, full synchronization, exactly-once delivery and a durable outbox are not implemented. The application decides whether to retry an uncertain send.
 
 ## Development and releases
 

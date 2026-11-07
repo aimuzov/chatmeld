@@ -150,6 +150,23 @@ class VkDriver implements ProviderDriver {
           if (message) context.onMessage(message);
         },
       );
+      this.vk.updates.on("messages_read", (event) => {
+        if (
+          this.stop.signal.aborted ||
+          !event.isOutbox ||
+          event.peerId <= 0 ||
+          event.peerId >= 2_000_000_000
+        )
+          return;
+        const chatId = String(event.peerId);
+        context.onReceipt?.({
+          provider: "vk",
+          accountId: this.accountId,
+          chatId,
+          status: "read",
+          throughMessageId: `${chatId}:${event.localId}`,
+        });
+      });
       const signal = this.stop.signal;
       this.polling = this.poll(signal).catch((error: unknown) => {
         if (!signal.aborted) {
