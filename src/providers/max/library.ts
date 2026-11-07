@@ -22,6 +22,12 @@ import type {
   SessionChange,
 } from "../../library/types.js";
 
+type BridgeMessage = Omit<Message, "attachments"> & {
+  attachments: (Message["attachments"][number] & {
+    referencePayload?: unknown;
+  })[];
+};
+
 type Pending = {
   resolve(value: unknown): void;
   reject(error: Error): void;
@@ -208,30 +214,29 @@ class MaxDriver implements ProviderDriver {
     } else if (value.event === "receipt") {
       this.context?.onReceipt?.(value.receipt as MessageReceipt);
     } else if (value.event === "message") {
-      const message = value.message as Omit<Message, "attachments"> & {
-        attachments: (Message["attachments"][number] & {
-          referencePayload?: unknown;
-        })[];
-      };
-      this.context?.onMessage({
-        ...message,
-        attachments: message.attachments.map(
-          ({ referencePayload, ...attachment }) => ({
-            ...attachment,
-            ...(referencePayload
-              ? {
-                  reference: encodeMediaReference(
-                    "max",
-                    this.options.accountId,
-                    referencePayload,
-                  ),
-                }
-              : {}),
-          }),
-        ),
-      });
+      this.context?.onMessage(this.mapMessage(value.message as BridgeMessage));
     } else if (value.event === "fatal")
       this.fail(new Error("MAX connection failed"));
+  }
+
+  private mapMessage(message: BridgeMessage): Message {
+    return {
+      ...message,
+      attachments: message.attachments.map(
+        ({ referencePayload, ...attachment }) => ({
+          ...attachment,
+          ...(referencePayload
+            ? {
+                reference: encodeMediaReference(
+                  "max",
+                  this.options.accountId,
+                  referencePayload,
+                ),
+              }
+            : {}),
+        }),
+      ),
+    };
   }
 
   private notify(value: unknown): void {
@@ -285,6 +290,20 @@ class MaxDriver implements ProviderDriver {
 
   listChats(): Promise<Chat[]> {
     return this.request("chats");
+  }
+
+  async listHistoryPage(
+    chatId: string,
+    options: { limit: number; cursor?: string },
+  ) {
+    const page = await this.request<{
+      messages: BridgeMessage[];
+      nextCursor: string | null;
+    }>("historyPage", { chatId, ...options });
+    return {
+      messages: page.messages.map((message) => this.mapMessage(message)),
+      nextCursor: page.nextCursor ?? undefined,
+    };
   }
 
   async getAvatar(target: AvatarTarget): Promise<Avatar | undefined> {

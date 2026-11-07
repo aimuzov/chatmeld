@@ -330,6 +330,17 @@ class VkDriver implements ProviderDriver {
   }
 
   async listMessages(chatId: string, options: { limit?: number } = {}) {
+    return (await this.listHistoryPage(chatId, { limit: options.limit ?? 100 }))
+      .messages;
+  }
+
+  async listHistoryPage(
+    chatId: string,
+    { limit, cursor }: { limit: number; cursor?: string },
+  ) {
+    const start = cursor === undefined ? undefined : Number(cursor);
+    if (start !== undefined && (!Number.isSafeInteger(start) || start <= 0))
+      throw new AdapterError("INVALID_OPTIONS", "Некорректный курсор VK.");
     if (!/^-?\d+$/.test(chatId) || !Number.isSafeInteger(Number(chatId)))
       throw new AdapterError("INVALID_OPTIONS", "Некорректный ID чата VK.");
     await this.requireAuthorization();
@@ -337,7 +348,8 @@ class VkDriver implements ProviderDriver {
       const page = await this.vk!.api.messages.getHistory({
         ...this.groupParams,
         peer_id: Number(chatId),
-        count: options.limit ?? 100,
+        count: limit,
+        ...(start === undefined ? {} : { start_message_id: start, offset: 1 }),
         extended: 1,
       });
       const names = new Map<number, string>(
@@ -352,7 +364,7 @@ class VkDriver implements ProviderDriver {
           [user.first_name, user.last_name].filter(Boolean).join(" "),
         ]),
       );
-      return page.items.map((message) => ({
+      const messages = page.items.map((message) => ({
         provider: "vk" as const,
         accountId: this.accountId,
         chatId,
@@ -369,6 +381,13 @@ class VkDriver implements ProviderDriver {
           this.accountId,
         ),
       }));
+      return {
+        messages,
+        nextCursor:
+          page.items.length === limit
+            ? String(page.items.at(-1)!.id)
+            : undefined,
+      };
     } catch (error) {
       throw vkError(error, this.communityId);
     }

@@ -297,12 +297,27 @@ class TelegramDriver implements ProviderDriver {
   }
 
   async listMessages(chatId: string, options: { limit?: number } = {}) {
-    if (!(await this.listChats()).some((chat) => chat.id === chatId))
-      throw new Error("Чат Telegram не найден.");
-    const messages = await this.ready().getMessages(chatId, {
-      limit: options.limit ?? 100,
-    });
-    return messages
+    return (await this.listHistoryPage(chatId, { limit: options.limit ?? 100 }))
+      .messages;
+  }
+
+  async listHistoryPage(
+    chatId: string,
+    { limit, cursor }: { limit: number; cursor?: string },
+  ) {
+    if (
+      !this.dialogIds.has(chatId) &&
+      !(await this.listChats()).some((chat) => chat.id === chatId)
+    )
+      throw new AdapterError("INVALID_OPTIONS", "Чат Telegram не найден.");
+    const offsetId = cursor === undefined ? 0 : Number(cursor);
+    if (!Number.isSafeInteger(offsetId) || offsetId < 0)
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Некорректный курсор Telegram.",
+      );
+    const page = await this.ready().getMessages(chatId, { limit, offsetId });
+    const messages = page
       .filter((message) => message instanceof Api.Message)
       .map((message) => {
         const normalized = normalizeMessage(message, this.options.accountId);
@@ -310,6 +325,10 @@ class TelegramDriver implements ProviderDriver {
           normalized.displayName = utils.getDisplayName(message.sender);
         return normalized;
       });
+    return {
+      messages,
+      nextCursor: page.length === limit ? String(page.at(-1)!.id) : undefined,
+    };
   }
 
   async sendMedia(

@@ -219,7 +219,7 @@ test("Telegram history restores a private channel entity before requesting messa
     bot: false,
   }));
   t.mock.method(TelegramClient.prototype, "destroy", async () => undefined);
-  t.mock.method(
+  const dialogs = t.mock.method(
     TelegramClient.prototype,
     "iterDialogs",
     async function* (this: TelegramClient) {
@@ -237,10 +237,11 @@ test("Telegram history restores a private channel entity before requesting messa
         JSON.stringify(request.peer),
       );
       assert.equal(request.peer.accessHash.toString(), "98765");
+      const id = request.offsetId === 7 ? 6 : 7;
       return new Api.messages.Messages({
         messages: [
           new Api.Message({
-            id: 7,
+            id,
             peerId: new Api.PeerChannel({ channelId: bigInt(42) }),
             date: 1700000000,
             message: "Saved history",
@@ -259,6 +260,24 @@ test("Telegram history restores a private channel entity before requesting messa
     assert.equal(messages[0]?.text, "Saved history");
     assert.equal(messages[0]?.messageId, "-10042:7");
     assert.equal(messages[0]?.direction, "outgoing");
+    const first = await f.driver.listHistoryPage!("-10042", { limit: 1 });
+    assert.equal(first.nextCursor, "7");
+    const older = await f.driver.listHistoryPage!("-10042", {
+      limit: 1,
+      cursor: first.nextCursor,
+    });
+    assert.equal(older.messages[0]?.messageId, "-10042:6");
+    const download = t.mock.method(
+      TelegramClient.prototype,
+      "downloadProfilePhoto",
+      async () => Buffer.alloc(0),
+    );
+    await Promise.all([
+      f.driver.getAvatar!({ type: "chat", id: "-10042" }),
+      f.driver.getAvatar!({ type: "chat", id: "-10042" }),
+    ]);
+    assert.equal(download.mock.callCount(), 2);
+    assert.equal(dialogs.mock.callCount(), 1);
   } finally {
     await f.driver.disconnect();
   }

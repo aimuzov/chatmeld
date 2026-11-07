@@ -68,6 +68,8 @@ export interface DriverContext {
   onError(error: Error): void;
 }
 
+export type HistoryPage = { messages: Message[]; nextCursor?: string };
+
 type MediaSendResult = {
   externalId: string;
   attachments?: Message["attachments"];
@@ -80,6 +82,10 @@ export interface ProviderDriver {
   getAvatar?(target: AvatarTarget): Promise<Avatar | undefined>;
   sendMedia?(chatId: string, media: MediaInput): Promise<MediaSendResult>;
   downloadMedia?(reference: string): Promise<MediaFile>;
+  listHistoryPage?(
+    chatId: string,
+    options: { limit: number; cursor?: string },
+  ): Promise<HistoryPage>;
   listMessages?(
     chatId: string,
     options?: { limit?: number },
@@ -122,6 +128,10 @@ export interface MessagingAdapter {
   getAvatar(target: AvatarTarget): Promise<Avatar | undefined>;
   sendMedia(chatId: string, media: MediaInput): Promise<MediaSendResult>;
   downloadMedia(reference: string): Promise<MediaFile>;
+  listHistoryPage?(
+    chatId: string,
+    options: { limit: number; cursor?: string },
+  ): Promise<HistoryPage>;
   listMessages?(
     chatId: string,
     options?: { limit?: number },

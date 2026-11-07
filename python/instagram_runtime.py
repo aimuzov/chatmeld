@@ -370,6 +370,19 @@ class InstagramRuntime:
                 result.append({"id": identifier(thread), "title": title or identifier(thread),
                                **({"isBot": True} if bot else {}),
                                **({"profileUrl": f"https://www.instagram.com/{username}/"} if username else {})})
+        elif method == 'historyPage':
+            from instagrapi.extractors import extract_direct_thread
+            chat_id = str(int(params['chatId']))
+            query = {'visual_message_return_type': 'unseen', 'direction': 'older',
+                     'seq_id': '40065', 'limit': str(max(1, min(20, int(params['limit']))))}
+            if params.get('cursor'):
+                query['cursor'] = params['cursor']
+            raw = self.client.private_request(f'direct_v2/threads/{chat_id}/', params=query)['thread']
+            thread = extract_direct_thread(raw)
+            users = self._users(thread)
+            result = {'messages': [normalize_message(m, chat_id, self.account_id, self.self_id, users)
+                                   for m in thread.messages],
+                      'nextCursor': raw.get('oldest_cursor') or None}
         elif method == 'history':
             limit = max(1, min(100, int(params.get('limit', 50))))
             chat_id = str(params['chatId'])

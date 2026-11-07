@@ -297,6 +297,7 @@ export class Adapter implements MessagingAdapter {
   }
   private async perform<T>(
     action: (driver: ProviderDriver) => Promise<T>,
+    failConnection = true,
   ): Promise<T> {
     if (this.fault) throw this.fault;
     if (!this.connected || !this.driver || !this.control)
@@ -312,7 +313,7 @@ export class Adapter implements MessagingAdapter {
         ["INVALID_OPTIONS", "UNSUPPORTED_OPERATION"].includes(error.code)
       )
         throw error;
-      this.fail(error);
+      if (failConnection) this.fail(error);
       throw this.fault ?? safeError(error);
     }
   }
@@ -365,6 +366,28 @@ export class Adapter implements MessagingAdapter {
     return this.perform(
       (driver) => driver.getAvatar?.(target) ?? Promise.resolve(undefined),
     );
+  }
+  listHistoryPage(chatId: string, options: { limit: number; cursor?: string }) {
+    if (
+      !chatId.trim() ||
+      !Number.isInteger(options.limit) ||
+      options.limit < 1 ||
+      options.limit > 100
+    )
+      return Promise.reject(
+        new AdapterError(
+          "INVALID_OPTIONS",
+          "Неверные параметры страницы истории.",
+        ),
+      );
+    return this.perform((driver) => {
+      if (!driver.listHistoryPage)
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Провайдер не поддерживает загрузку истории страницами.",
+        );
+      return driver.listHistoryPage(chatId, options);
+    }, false);
   }
   listMessages(chatId: string, options: { limit?: number } = {}) {
     const limit = options.limit ?? 100;

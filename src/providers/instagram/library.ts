@@ -376,6 +376,19 @@ class InstagramDriver implements ProviderDriver {
     });
     return messages.map((message) => this.mapMessage(message));
   }
+  async listHistoryPage(
+    chatId: string,
+    options: { limit: number; cursor?: string },
+  ) {
+    const page = await this.request<{
+      messages: unknown[];
+      nextCursor?: string;
+    }>("historyPage", { chatId, ...options });
+    return {
+      messages: page.messages.map((message) => this.mapMessage(message)),
+      nextCursor: page.nextCursor ?? undefined,
+    };
+  }
   sendMessage(chatId: string, text: string): Promise<{ externalId: string }> {
     return this.request("send", { chatId, text });
   }

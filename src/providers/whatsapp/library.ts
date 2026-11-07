@@ -184,6 +184,11 @@ export function createWhatsAppDriver(options: {
     connect: (context) => open(context, false),
     authorize: (context) => open(context, true),
     listChats: () => request<Chat[]>("chats"),
+    listHistoryPage: (chatId, options) =>
+      request<import("../../library/types.js").HistoryPage>("historyPage", {
+        chatId,
+        ...options,
+      }),
     getAvatar: async (target) =>
       downloadAvatar(
         await request<string | undefined>("avatar", target),

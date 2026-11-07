@@ -138,6 +138,16 @@ class Bridge:
             for chat in await self.client.fetch_chats():
                 chats[chat.id] = chat
             return await list_named_chats(self.client, list(chats.values()))
+        if method == "historyPage":
+            chat_id = int(params["chatId"])
+            limit = max(1, min(40, int(params["limit"])))
+            cursor = int(params["cursor"]) if params.get("cursor") else None
+            chat = await self.client.get_chat(chat_id)
+            page = await chat.history(backward=limit, from_time=cursor)
+            messages = [normalize_message(message, self.account_id, self.client.me.contact.id,
+                                          history_chat_id=chat_id) for message in page]
+            oldest = min((message.time for message in page), default=0)
+            return {"messages": messages, "nextCursor": str(oldest - 1) if page and oldest > 1 else None}
         if method == "avatar":
             target_id = int(params["id"])
             if params["type"] == "user":

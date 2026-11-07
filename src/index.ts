@@ -16,6 +16,7 @@ export type {
   Chat,
   Message,
   MessageReceipt,
+  HistoryPage,
   MessagingAdapter,
   ProviderKind,
   SessionChange,
