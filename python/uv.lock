@@ -446,7 +446,7 @@ instagram = [
 
 [package.metadata]
 requires-dist = [
-    { name = "instagrapi", marker = "extra == 'instagram'", specifier = "==3.2.2" },
+    { name = "instagrapi", marker = "extra == 'instagram'", specifier = "==3.2.6" },
     { name = "maxapi-python", specifier = "==2.5.0" },
 ]
 provides-extras = ["instagram"]
@@ -602,7 +602,7 @@ wheels = [
 
 [[package]]
 name = "instagrapi"
-version = "3.2.2"
+version = "3.2.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "curl-cffi" },
@@ -613,9 +613,9 @@ dependencies = [
     { name = "pysocks" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e7/f6/0eb0fb0931eac3fce8995bda45d95c839704100aa5b1ccbfb71f636b13e1/instagrapi-3.2.2.tar.gz", hash = "sha256:89a4fe8df1fc8291854138d5bb19dee4652c304b80839a71cb1849a36f0d1eb9", size = 253052, upload-time = "2026-10-27T05:25:32.824Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b9/d6/d437a7becf1326253c64d3a3845b858386479b4eb62f23a6572e5628cd99/instagrapi-3.2.6.tar.gz", hash = "sha256:76cfadaf2b926cba15461264d90ccfa2bdc9b6061840d672c1a18b2f21dcc59f", size = 253623, upload-time = "2026-11-06T21:47:17.812Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/79/df/66053620918f6d4fa469dde777267279f0b80f7e3baed2116039b62bcb92/instagrapi-3.2.2-py3-none-any.whl", hash = "sha256:e09446e4325850c89e302fc6d930f1910d1c7749d0ea66df17dec93ff52c6717", size = 273763, upload-time = "2026-10-27T05:25:30.686Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/b1/b9eb92bfb3b4c56d5762177f344fe35668c3bed593adac973ba715e35df4/instagrapi-3.2.6-py3-none-any.whl", hash = "sha256:966841c8313051a8fd98902cfc36b268cf5bb31b426e6ac25aee5dc490342f5d", size = 274483, upload-time = "2026-11-06T21:47:16.118Z" },
 ]
 
 [[package]]
