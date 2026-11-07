@@ -48,29 +48,52 @@ export interface AuthChannel {
   progress(message: string): void;
 }
 
+export type MessageReceipt = {
+  provider: ProviderKind;
+  accountId: string;
+  chatId: string;
+  status: "delivered" | "read";
+} & (
+  | { messageIds: string[] }
+  | { throughMessageId: string }
+  | { throughSentAt: string }
+);
+
 export interface DriverContext {
   storage: SessionStorage;
   signal: AbortSignal;
   auth?: AuthChannel;
   onMessage(message: Message): void;
+  onReceipt?(receipt: MessageReceipt): void;
   onError(error: Error): void;
 }
+
+export type HistoryPage = { messages: Message[]; nextCursor?: string };
+
+type MediaSendResult = {
+  externalId: string;
+  attachments?: Message["attachments"];
+};
 
 export interface ProviderDriver {
   connect(context: DriverContext): Promise<void>;
   authorize(context: DriverContext): Promise<void>;
   listChats(): Promise<Chat[]>;
   getAvatar?(target: AvatarTarget): Promise<Avatar | undefined>;
-  sendMedia?(
-    chatId: string,
-    media: MediaInput,
-  ): Promise<{ externalId: string }>;
+  sendMedia?(chatId: string, media: MediaInput): Promise<MediaSendResult>;
   downloadMedia?(reference: string): Promise<MediaFile>;
+  listHistoryPage?(
+    chatId: string,
+    options: { limit: number; cursor?: string },
+  ): Promise<HistoryPage>;
   listMessages?(
     chatId: string,
     options?: { limit?: number },
   ): Promise<Message[]>;
-  sendMessage(chatId: string, text: string): Promise<{ externalId: string }>;
+  sendMessage(
+    chatId: string,
+    text: string,
+  ): Promise<{ externalId: string; sentAt?: string }>;
   disconnect(): Promise<void>;
 }
 
@@ -81,7 +104,7 @@ export type AdapterOptions = {
   | { provider: "telegram"; apiId: number; apiHash: string }
   | { provider: "max"; pythonCommand?: string }
   | { provider: "whatsapp" }
-  | { provider: "vk" }
+  | { provider: "vk"; communityId?: number }
   | { provider: "instagram"; username: string; pythonCommand?: string }
 );
 
@@ -103,14 +126,24 @@ export interface MessagingAdapter {
   respondToChallenge(response: { challengeId: string; value: string }): void;
   listChats(): Promise<Chat[]>;
   getAvatar(target: AvatarTarget): Promise<Avatar | undefined>;
-  sendMedia(chatId: string, media: MediaInput): Promise<{ externalId: string }>;
+  sendMedia(chatId: string, media: MediaInput): Promise<MediaSendResult>;
   downloadMedia(reference: string): Promise<MediaFile>;
+  listHistoryPage?(
+    chatId: string,
+    options: { limit: number; cursor?: string },
+  ): Promise<HistoryPage>;
   listMessages?(
     chatId: string,
     options?: { limit?: number },
   ): Promise<Message[]>;
-  sendMessage(chatId: string, text: string): Promise<{ externalId: string }>;
+  sendMessage(
+    chatId: string,
+    text: string,
+  ): Promise<{ externalId: string; sentAt?: string }>;
   onMessage(handler: (message: Message) => void | Promise<void>): () => void;
+  onReceipt?(
+    handler: (receipt: MessageReceipt) => void | Promise<void>,
+  ): () => void;
   onState(handler: (state: AdapterState) => void): () => void;
   disconnect(): Promise<void>;
 }

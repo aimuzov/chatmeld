@@ -17,9 +17,16 @@ import type {
   Message,
   MediaInput,
   MediaFile,
+  MessageReceipt,
   ProviderDriver,
   SessionChange,
 } from "../../library/types.js";
+
+type BridgeMessage = Omit<Message, "attachments"> & {
+  attachments: (Message["attachments"][number] & {
+    referencePayload?: unknown;
+  })[];
+};
 
 type Pending = {
   resolve(value: unknown): void;
@@ -204,31 +211,32 @@ class MaxDriver implements ProviderDriver {
         },
         () => this.fail(new Error("MAX challenge failed")),
       );
+    } else if (value.event === "receipt") {
+      this.context?.onReceipt?.(value.receipt as MessageReceipt);
     } else if (value.event === "message") {
-      const message = value.message as Omit<Message, "attachments"> & {
-        attachments: (Message["attachments"][number] & {
-          referencePayload?: unknown;
-        })[];
-      };
-      this.context?.onMessage({
-        ...message,
-        attachments: message.attachments.map(
-          ({ referencePayload, ...attachment }) => ({
-            ...attachment,
-            ...(referencePayload
-              ? {
-                  reference: encodeMediaReference(
-                    "max",
-                    this.options.accountId,
-                    referencePayload,
-                  ),
-                }
-              : {}),
-          }),
-        ),
-      });
+      this.context?.onMessage(this.mapMessage(value.message as BridgeMessage));
     } else if (value.event === "fatal")
       this.fail(new Error("MAX connection failed"));
+  }
+
+  private mapMessage(message: BridgeMessage): Message {
+    return {
+      ...message,
+      attachments: message.attachments.map(
+        ({ referencePayload, ...attachment }) => ({
+          ...attachment,
+          ...(referencePayload
+            ? {
+                reference: encodeMediaReference(
+                  "max",
+                  this.options.accountId,
+                  referencePayload,
+                ),
+              }
+            : {}),
+        }),
+      ),
+    };
   }
 
   private notify(value: unknown): void {
@@ -284,6 +292,20 @@ class MaxDriver implements ProviderDriver {
     return this.request("chats");
   }
 
+  async listHistoryPage(
+    chatId: string,
+    options: { limit: number; cursor?: string },
+  ) {
+    const page = await this.request<{
+      messages: BridgeMessage[];
+      nextCursor: string | null;
+    }>("historyPage", { chatId, ...options });
+    return {
+      messages: page.messages.map((message) => this.mapMessage(message)),
+      nextCursor: page.nextCursor ?? undefined,
+    };
+  }
+
   async getAvatar(target: AvatarTarget): Promise<Avatar | undefined> {
     const url = await this.request<string | null>("avatar", target);
     return downloadAvatar(
@@ -293,7 +315,10 @@ class MaxDriver implements ProviderDriver {
     );
   }
 
-  sendMessage(chatId: string, text: string): Promise<{ externalId: string }> {
+  sendMessage(
+    chatId: string,
+    text: string,
+  ): Promise<{ externalId: string; sentAt?: string }> {
     return this.request("send", { chatId, text });
   }
 

@@ -3,6 +3,8 @@ export type ProviderKind = "telegram" | "max" | "whatsapp" | "vk" | "instagram";
 export interface Chat {
   id: string;
   title: string;
+  isBot?: boolean;
+  profileUrl?: string;
 }
 
 export interface MediaAttachment {
@@ -22,6 +24,7 @@ export interface MediaFile {
 export interface MediaInput extends MediaFile {
   kind: "photo" | "video" | "audio";
   caption?: string;
+  voice?: boolean;
 }
 
 export interface Message {
@@ -35,6 +38,7 @@ export interface Message {
   direction: "incoming" | "outgoing";
   text: string;
   sentAt: string;
+  status?: "sent" | "delivered" | "read";
   attachments: MediaAttachment[];
 }
 

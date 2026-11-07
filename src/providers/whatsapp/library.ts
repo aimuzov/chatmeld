@@ -8,6 +8,7 @@ import type {
   Chat,
   DriverContext,
   Message,
+  MessageReceipt,
   ProviderDriver,
   SessionChange,
 } from "../../library/types.js";
@@ -21,6 +22,7 @@ type Reply = {
   error?: string;
   code?: AdapterErrorCode;
   event?: string;
+  receipt?: MessageReceipt;
   value?: string;
   message?: Message | string;
 };
@@ -154,6 +156,8 @@ export function createWhatsAppDriver(options: {
             reply.error ?? "Ошибка подключения WhatsApp.",
           ),
         );
+      else if (reply.event === "receipt" && !fault && !closing && reply.receipt)
+        context!.onReceipt?.(reply.receipt);
       else if (reply.event === "message" && !fault && !closing)
         context!.onMessage(reply.message as Message);
       else if (reply.event === "qr" && context!.auth) {
@@ -167,7 +171,9 @@ export function createWhatsAppDriver(options: {
     abort = () => fail(new Error("Подключение WhatsApp отменено."));
     context.signal.addEventListener("abort", abort, { once: true });
     try {
-      await request(authorize ? "authorize" : "connect", options);
+      await request(authorize ? "authorize" : "connect", {
+        accountId: options.accountId,
+      });
       await authQueue;
     } catch (error) {
       await driver.disconnect().catch(() => {});
@@ -178,6 +184,11 @@ export function createWhatsAppDriver(options: {
     connect: (context) => open(context, false),
     authorize: (context) => open(context, true),
     listChats: () => request<Chat[]>("chats"),
+    listHistoryPage: (chatId, options) =>
+      request<import("../../library/types.js").HistoryPage>("historyPage", {
+        chatId,
+        ...options,
+      }),
     getAvatar: async (target) =>
       downloadAvatar(
         await request<string | undefined>("avatar", target),

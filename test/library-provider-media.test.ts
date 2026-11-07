@@ -614,7 +614,7 @@ test("Telegram stale media references leave the connected adapter usable", async
         (error: { code: string }) => error.code === "UNSUPPORTED_OPERATION",
       );
       assert.deepEqual(await adapter.listChats(), [
-        { id: "42", title: "Peer" },
+        { id: "42", title: "Peer", isBot: false },
       ]);
       assert.deepEqual(await adapter.sendMessage("42", "Still connected"), {
         externalId: "42:8",

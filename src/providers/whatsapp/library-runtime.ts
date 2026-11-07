@@ -5,6 +5,7 @@ import makeWASocket, {
   proto,
   DisconnectReason,
   type WASocket,
+  type BaileysEventMap,
   type WAMessage,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
@@ -21,7 +22,7 @@ import type {
   AvatarTarget,
   DriverContext,
 } from "../../library/types.js";
-import { AdapterError } from "../../library/errors.js";
+import { AdapterError, abortable } from "../../library/errors.js";
 import { createWhatsAppAuthState } from "./session-storage.js";
 import { WhatsAppCatalog } from "./catalog.js";
 import { isChatId, normalizeMessage } from "./normalize.js";
@@ -31,6 +32,7 @@ import { hasSession } from "./auth.js";
 export class WhatsAppLibraryRuntime {
   private socket?: WASocket;
   private auth?: Awaited<ReturnType<typeof createWhatsAppAuthState>>;
+  private historyAnchors = new Map<string, WAMessage>();
   private catalog = new WhatsAppCatalog();
   private fault?: Error;
   private stopped = false;
@@ -170,11 +172,45 @@ export class WhatsAppLibraryRuntime {
         ),
       );
     });
+    socket.ev.on("messages.update", (updates) => {
+      if (this.socket !== socket || this.stopped || this.fault) return;
+      for (const { key, update } of updates) {
+        if (!key.fromMe || !key.id) continue;
+        const status = update.status;
+        if (
+          status !== proto.WebMessageInfo.Status.DELIVERY_ACK &&
+          status !== proto.WebMessageInfo.Status.READ &&
+          status !== proto.WebMessageInfo.Status.PLAYED
+        )
+          continue;
+        const chatIds = new Set(
+          [key.remoteJid, key.remoteJidAlt]
+            .filter((id): id is string => !!id)
+            .map(jidNormalizedUser),
+        );
+        for (const chatId of chatIds) {
+          if (!isChatId(chatId) || chatId.endsWith("@g.us")) continue;
+          context.onReceipt?.({
+            provider: "whatsapp",
+            accountId: this.accountId,
+            chatId,
+            messageIds: [`${chatId}:${key.id}`],
+            status:
+              status === proto.WebMessageInfo.Status.DELIVERY_ACK
+                ? "delivered"
+                : "read",
+          });
+        }
+      }
+    });
     socket.ev.on("messaging-history.set", (data) => {
       this.catalog.chats(data.chats);
       this.catalog.contacts(data.contacts);
       this.catalog.mappings(data.lidPnMappings ?? []);
-      for (const message of data.messages) this.catalog.observe(message);
+      for (const message of data.messages) {
+        this.catalog.observe(message);
+        this.observeHistoryAnchor(message);
+      }
     });
     socket.ev.on("chats.upsert", (items) => this.catalog.chats(items));
     socket.ev.on("chats.update", (items) => this.catalog.chats(items));
@@ -186,11 +222,134 @@ export class WhatsAppLibraryRuntime {
       if (this.stopped || this.fault) return;
       for (const item of data.messages) {
         this.catalog.observe(item);
+        this.observeHistoryAnchor(item);
         if (data.type !== "notify") continue;
         const message = normalizeMessage(item, this.accountId);
         if (message) context.onMessage(message);
       }
     });
+  }
+
+  private observeHistoryAnchor(message: WAMessage) {
+    const chat = jidNormalizedUser(message.key.remoteJid ?? undefined);
+    const timestamp = Number(message.messageTimestamp);
+    if (
+      !isChatId(chat) ||
+      !message.key.id ||
+      !Number.isSafeInteger(timestamp) ||
+      timestamp <= 0
+    )
+      return;
+    const previous = this.historyAnchors.get(chat);
+    if (!previous || Number(previous.messageTimestamp) < timestamp)
+      this.historyAnchors.set(chat, message);
+  }
+
+  async listHistoryPage(
+    chatId: string,
+    { limit, cursor }: { limit: number; cursor?: string },
+  ) {
+    this.requireConnection();
+    const socket = this.socket!;
+    const first = cursor ? undefined : this.historyAnchors.get(chatId);
+    let anchor: { id: string; jid: string; timestamp: number; fromMe: boolean };
+    const asAnchor = (message: WAMessage) => ({
+      id: message.key.id!,
+      jid: message.key.remoteJid!,
+      timestamp: Number(message.messageTimestamp),
+      fromMe: Boolean(message.key.fromMe),
+    });
+    if (first) anchor = asAnchor(first);
+    else if (cursor) {
+      try {
+        anchor = JSON.parse(cursor);
+        if (
+          typeof anchor.id !== "string" ||
+          !anchor.id ||
+          typeof anchor.jid !== "string" ||
+          jidNormalizedUser(anchor.jid) !== chatId ||
+          typeof anchor.fromMe !== "boolean" ||
+          !Number.isSafeInteger(anchor.timestamp) ||
+          anchor.timestamp <= 0
+        )
+          throw new Error();
+      } catch {
+        throw new AdapterError(
+          "INVALID_OPTIONS",
+          "Некорректный курсор WhatsApp.",
+        );
+      }
+    } else {
+      throw new AdapterError(
+        "UNSUPPORTED_OPERATION",
+        "WhatsApp ещё не передал исходное сообщение диалога.",
+      );
+    }
+
+    const initial = first && normalizeMessage(first, this.accountId, true);
+    const messages = initial ? [initial] : [];
+    if (messages.length === limit)
+      return { messages, nextCursor: JSON.stringify(anchor) };
+
+    type HistoryEvent = BaileysEventMap["messaging-history.set"];
+    const early = new Map<string, WAMessage[]>();
+    let requestId: string | undefined;
+    let resolve!: (items: WAMessage[]) => void;
+    const reply = new Promise<WAMessage[]>((done) => {
+      resolve = done;
+    });
+    const receive = (event: HistoryEvent) => {
+      const id = event.peerDataRequestSessionId;
+      if (event.syncType !== proto.HistorySync.HistorySyncType.ON_DEMAND || !id)
+        return;
+      if (id === requestId) resolve(event.messages);
+      else if (!requestId && early.size < 4) early.set(id, event.messages);
+    };
+    socket.ev.on("messaging-history.set", receive);
+    const timeout = AbortSignal.timeout(25_000);
+    try {
+      const signal = this.context
+        ? AbortSignal.any([timeout, this.context.signal])
+        : timeout;
+      requestId = await abortable(
+        socket.fetchMessageHistory(
+          Math.min(50, limit - messages.length),
+          { id: anchor.id, remoteJid: anchor.jid, fromMe: anchor.fromMe },
+          anchor.timestamp * 1000,
+        ),
+        signal,
+      );
+      const older = (early.get(requestId) ?? (await abortable(reply, signal)))
+        .filter(
+          (message) =>
+            jidNormalizedUser(message.key.remoteJid ?? undefined) === chatId &&
+            message.key.id &&
+            message.key.id !== anchor.id &&
+            Number(message.messageTimestamp) > 0 &&
+            Number(message.messageTimestamp) <= anchor.timestamp,
+        )
+        .sort(
+          (a, b) => Number(b.messageTimestamp) - Number(a.messageTimestamp),
+        );
+      for (const message of older) {
+        const normalized = normalizeMessage(message, this.accountId, true);
+        if (normalized) messages.push(normalized);
+      }
+      const oldest = older.at(-1);
+      return {
+        messages,
+        nextCursor: oldest ? JSON.stringify(asAnchor(oldest)) : undefined,
+      };
+    } catch (error) {
+      if (timeout.aborted && !this.context?.signal.aborted)
+        throw new AdapterError(
+          "PROVIDER_ERROR",
+          "WhatsApp не ответил на запрос истории.",
+        );
+      throw error;
+    } finally {
+      socket.ev.off("messaging-history.set", receive);
+    }
   }
 
   listChats() {

@@ -229,6 +229,7 @@ await persistOutgoing({
   accountId: adapter.accountId,
   chatId: chat.id,
   messageId: sent.externalId,
+  sentAt: sent.sentAt,
   text: "Hello!",
 });
 ```
@@ -268,7 +269,11 @@ for (const message of recent) {
 }
 ```
 
-`persistIncoming` here stores a message in your database; respect `direction`, since history includes outgoing messages. Your project keeps durable history. There is no full synchronization, pagination or guaranteed gap recovery.
+Use `listHistoryPage(chatId, { limit, cursor })` to load older messages on all five providers. Omit `cursor` on the first request, then pass `nextCursor` from the response until it is absent. WhatsApp needs an initial message for the requested chat before it can load older messages.
+
+`persistIncoming` stores a message in your database. Use `direction` to distinguish incoming and outgoing messages. Your project keeps durable history. Full synchronization and guaranteed gap recovery are outside the history API.
+
+Set `CHATMELD_TELEGRAM_SOCKS` to a SOCKS5 URL with an explicit port for Telegram. Set `HTTPS_PROXY` for the WhatsApp WebSocket connection. The WhatsApp proxy requires Node.js 24.5 or later.
 
 ## Instagram
 
@@ -449,9 +454,19 @@ const removeState = adapter.onState((state) => {
 | `UNSUPPORTED_OPERATION` | Unsupported format, operation or unavailable attachment; the connection remains usable. |
 | `DISCONNECTED`          | Provider connection ended.                                                              |
 
+## Delivery receipts
+
+Subscribe with `adapter.onReceipt?.(handler)`. Handlers may be async; the returned function unsubscribes. The event contains `provider`, `accountId`, `chatId` and `status` (`delivered` or `read`). It targets exact `messageIds`, a numeric `throughMessageId` watermark or a `throughSentAt` timestamp watermark. Apply watermarks only to outgoing messages in the same account and chat. Save them even when the message has not been stored yet, and never downgrade a read message to delivered.
+
+Telegram and VK encode `throughMessageId` as `chatId:messageId`. Compare the numeric suffix within the same chat.
+
+WhatsApp reports delivery and read acknowledgements in direct chats. Telegram, VK and MAX report private-chat read watermarks; Telegram has no separate delivered-to-device status. Group acknowledgements are omitted because one participant does not confirm the whole group. Receipts are live events, not a backfill of confirmations missed while disconnected. MAX send results include the server message `sentAt` timestamp for matching its read watermark.
+
+Receipt and message handlers share a queue of 100 events. An overflowing queue or a failed handler closes the connection.
+
 ## Boundaries
 
-Chatmeld reads recent Telegram/VK/Instagram messages, downloads supported media and exposes avatars. Your project owns history and file storage. Reactions, read receipts, full synchronization, exactly-once delivery and a durable outbox are not implemented. The application decides whether to retry an uncertain send.
+Chatmeld reads recent Telegram/VK/Instagram messages, downloads supported media and exposes avatars. Your project owns history and file storage. Reactions, full synchronization, exactly-once delivery and a durable outbox are not implemented. The application decides whether to retry an uncertain send.
 
 ## Development and releases
 

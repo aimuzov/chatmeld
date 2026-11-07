@@ -2,18 +2,26 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
 import type makeWASocket from "@whiskeysockets/baileys";
-import { DisconnectReason } from "@whiskeysockets/baileys";
+import { DisconnectReason, proto } from "@whiskeysockets/baileys";
 import { AdapterError } from "../src/library/errors.js";
 import type { DriverContext, SessionChange } from "../src/library/types.js";
 import { WhatsAppLibraryRuntime } from "../src/providers/whatsapp/library-runtime.js";
 
 function harness(
   writeBatch: (changes: readonly SessionChange[]) => Promise<void>,
+  history?: (
+    events: EventEmitter,
+    count: number,
+    key: unknown,
+    timestamp: number,
+  ) => Promise<string>,
 ) {
   const events = new EventEmitter();
   let ended = false;
   const socket = {
     ev: events,
+    fetchMessageHistory: (count: number, key: unknown, timestamp: number) =>
+      history!(events, count, key, timestamp),
     end() {
       ended = true;
     },
@@ -109,4 +117,106 @@ test("WhatsApp revoked session requires a new authorization without exposing dis
   assert.equal(app.ended(), true);
   assert.equal((app.errors[0] as AdapterError).code, "AUTH_REQUIRED");
   await app.runtime.close();
+});
+
+test("WhatsApp reports delivery and read acknowledgements only for own direct messages", async () => {
+  const app = harness(async () => {});
+  const receipts: unknown[] = [];
+  app.context.onReceipt = (receipt) => receipts.push(receipt);
+  const opening = app.runtime.open(app.context, true);
+  await new Promise((resolve) => setImmediate(resolve));
+  app.events.emit("connection.update", { connection: "open" });
+  await opening;
+  for (const status of [2, 3, 4, 5])
+    app.events.emit("messages.update", [
+      {
+        key: { fromMe: true, remoteJid: "42@s.whatsapp.net", id: "m1" },
+        update: { status },
+      },
+    ]);
+  app.events.emit("messages.update", [
+    {
+      key: { fromMe: false, remoteJid: "42@s.whatsapp.net", id: "incoming" },
+      update: { status: 4 },
+    },
+    {
+      key: { fromMe: true, remoteJid: "group@g.us", id: "group" },
+      update: { status: 4 },
+    },
+  ]);
+  assert.deepEqual(
+    receipts,
+    ["delivered", "read", "read"].map((status) => ({
+      provider: "whatsapp",
+      accountId: "account",
+      chatId: "42@s.whatsapp.net",
+      messageIds: ["42@s.whatsapp.net:m1"],
+      status,
+    })),
+  );
+  await app.runtime.close();
+  app.events.emit("messages.update", [
+    {
+      key: { fromMe: true, remoteJid: "42@s.whatsapp.net", id: "late" },
+      update: { status: 4 },
+    },
+  ]);
+  assert.equal(receipts.length, 3);
+});
+
+test("WhatsApp history correlates the phone response and resumes from a saved cursor", async () => {
+  const jid = "123@s.whatsapp.net";
+  const raw = (id: string, timestamp: number, fromMe = false) => ({
+    key: { remoteJid: jid, id, fromMe },
+    messageTimestamp: timestamp,
+    message: { conversation: id },
+  });
+  const calls: unknown[] = [];
+  const app = harness(
+    async () => {},
+    async (events, count, key, timestamp) => {
+      calls.push([count, key, timestamp]);
+      const id = "request-" + calls.length;
+      events.emit("messaging-history.set", {
+        chats: [],
+        contacts: [],
+        messages: calls.length === 1 ? [raw("older", 10, true)] : [],
+        syncType: proto.HistorySync.HistorySyncType.ON_DEMAND,
+        peerDataRequestSessionId: id,
+      });
+      return id;
+    },
+  );
+  const opening = app.runtime.open(app.context, true);
+  await new Promise((resolve) => setImmediate(resolve));
+  app.events.emit("connection.update", { connection: "open" });
+  await opening;
+  try {
+    app.events.emit("messaging-history.set", {
+      chats: [],
+      contacts: [],
+      messages: [raw("latest", 20)],
+    });
+    const first = await app.runtime.listHistoryPage(jid, { limit: 2 });
+    assert.deepEqual(
+      first.messages.map((message) => message.direction),
+      ["incoming", "outgoing"],
+    );
+    assert.ok(first.nextCursor);
+    assert.equal(
+      (
+        await app.runtime.listHistoryPage(jid, {
+          limit: 2,
+          cursor: first.nextCursor,
+        })
+      ).nextCursor,
+      undefined,
+    );
+    assert.deepEqual(calls, [
+      [1, { id: "latest", remoteJid: jid, fromMe: false }, 20000],
+      [2, { id: "older", remoteJid: jid, fromMe: true }, 10000],
+    ]);
+  } finally {
+    await app.runtime.close();
+  }
 });

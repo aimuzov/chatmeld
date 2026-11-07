@@ -6,10 +6,11 @@ import mimetypes
 import re
 import signal
 import sys
+from datetime import datetime, timezone
 
 from pymax import ExtraConfig, QrAuthFlow, WebClient, Photo, Video, File
 from chats import list_named_chats
-from normalize import normalize_message
+from normalize import normalize_message, normalize_read_receipt
 from library_store import RpcStore, StorageRpc
 
 OUTPUT = sys.stdout
@@ -97,6 +98,15 @@ class Bridge:
             except Exception:
                 self.emit({"event": "fatal"})
 
+        @self.client.on_message_read()
+        async def read(event, client):
+            if not self.listening or self.closing or client.me is None:
+                return
+            chat = next((chat for chat in client.chats or [] if chat.id == event.chat_id), None)
+            receipt = normalize_read_receipt(event, self.account_id, client.me.contact.id, chat is not None and chat.type == "DIALOG")
+            if receipt is not None:
+                self.emit({"event": "receipt", "receipt": receipt})
+
         @self.client.on_disconnect()
         async def disconnected(*args, **kwargs):
             if not self.closing:
@@ -128,6 +138,16 @@ class Bridge:
             for chat in await self.client.fetch_chats():
                 chats[chat.id] = chat
             return await list_named_chats(self.client, list(chats.values()))
+        if method == "historyPage":
+            chat_id = int(params["chatId"])
+            limit = max(1, min(40, int(params["limit"])))
+            cursor = int(params["cursor"]) if params.get("cursor") else None
+            chat = await self.client.get_chat(chat_id)
+            page = await chat.history(backward=limit, from_time=cursor)
+            messages = [normalize_message(message, self.account_id, self.client.me.contact.id,
+                                          history_chat_id=chat_id) for message in page]
+            oldest = min((message.time for message in page), default=0)
+            return {"messages": messages, "nextCursor": str(oldest - 1) if page and oldest > 1 else None}
         if method == "avatar":
             target_id = int(params["id"])
             if params["type"] == "user":
@@ -207,7 +227,7 @@ class Bridge:
             chat_id = int(params["chatId"])
             await self.client.get_chat(chat_id)
             message = await self.client.send_message(chat_id=chat_id, text=params["text"])
-            return {"externalId": f"{chat_id}:{message.id}"}
+            return {"externalId": f"{chat_id}:{message.id}", "sentAt": datetime.fromtimestamp(message.time / 1000, timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")}
         raise RuntimeError("Unknown MAX method")
 
     async def close(self):

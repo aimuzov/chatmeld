@@ -45,6 +45,8 @@ class TelegramDriver implements ProviderDriver {
   private failure?: Error;
   private removeAbort?: () => void;
   private removeUpdates?: () => void;
+  private dialogIds = new Set<string>();
+  private dialogLoad?: Promise<Chat[]>;
 
   constructor(
     private options: { accountId: string; apiId: number; apiHash: string },
@@ -84,12 +86,33 @@ class TelegramDriver implements ProviderDriver {
     if (stored && typeof stored.session !== "string")
       throw new Error("Некорректная сессия Telegram.");
     this.session = new StringSession(stored?.session ?? "");
+    const proxy = process.env.CHATMELD_TELEGRAM_SOCKS;
+    const route = proxy ? URL.parse(proxy) : undefined;
+    if (
+      proxy &&
+      (!route ||
+        route.protocol !== "socks5:" ||
+        !route.port ||
+        route.username ||
+        route.password)
+    )
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Неверный адрес SOCKS5 для Telegram.",
+      );
     this.client = new TelegramClient(
       this.session,
       this.options.apiId,
       this.options.apiHash,
       {
         connectionRetries: 5,
+        ...(route && {
+          proxy: {
+            socksType: 5 as const,
+            ip: route.hostname,
+            port: Number(route.port),
+          },
+        }),
         baseLogger: new Logger(LogLevel.NONE),
         deviceModel: "chatmeld",
         appVersion: "0.1.0",
@@ -188,7 +211,21 @@ class TelegramDriver implements ProviderDriver {
     };
     client.addEventHandler(receive, builder);
     this.removeUpdates = () => client.removeEventHandler(receive, builder);
-    const changed = async () => {
+    const changed = async (update: Api.TypeUpdate) => {
+      if (this.context!.signal.aborted || this.client !== client) return;
+      if (
+        update instanceof Api.UpdateReadHistoryOutbox &&
+        update.peer instanceof Api.PeerUser
+      ) {
+        const chatId = utils.getPeerId(update.peer);
+        this.context!.onReceipt?.({
+          provider: "telegram",
+          accountId: this.options.accountId,
+          chatId,
+          status: "read",
+          throughMessageId: `${chatId}:${update.maxId}`,
+        });
+      }
       this.queueSession();
       await this.writes.catch(() => undefined);
     };
@@ -202,21 +239,52 @@ class TelegramDriver implements ProviderDriver {
   }
 
   async listChats(): Promise<Chat[]> {
+    const client = this.ready();
+    if (this.dialogLoad) return this.dialogLoad;
+    const load = this.loadDialogs(client);
+    this.dialogLoad = load;
+    try {
+      return await load;
+    } finally {
+      if (this.dialogLoad === load) this.dialogLoad = undefined;
+    }
+  }
+
+  private async loadDialogs(client: TelegramClient): Promise<Chat[]> {
     const chats: Chat[] = [];
-    for await (const dialog of this.ready().iterDialogs({})) {
+    for await (const dialog of client.iterDialogs({})) {
+      const entity = dialog.entity;
+      const username =
+        entity instanceof Api.User || entity instanceof Api.Channel
+          ? entity.username
+          : undefined;
       if (dialog.id)
-        chats.push({ id: dialog.id.toString(), title: dialog.title ?? "" });
+        chats.push({
+          ...(username
+            ? {
+                profileUrl: `https://t.me/${encodeURIComponent(username)}?profile`,
+              }
+            : {}),
+          id: dialog.id.toString(),
+          title: dialog.title ?? "",
+          isBot:
+            dialog.entity instanceof Api.User && Boolean(dialog.entity.bot),
+        });
     }
     this.queueSession();
     await this.writes;
+    if (this.client === client)
+      this.dialogIds = new Set(chats.map((chat) => chat.id));
     return chats;
   }
 
   async getAvatar(target: AvatarTarget): Promise<Avatar | undefined> {
     const client = this.ready();
-    const chats = await this.listChats();
-    if (target.type === "chat" && !chats.some((chat) => chat.id === target.id))
-      throw new AdapterError("INVALID_OPTIONS", "Чат Telegram не найден.");
+    if (target.type === "chat" && !this.dialogIds.has(target.id)) {
+      const chats = await this.listChats();
+      if (!chats.some((chat) => chat.id === target.id))
+        throw new AdapterError("INVALID_OPTIONS", "Чат Telegram не найден.");
+    }
     try {
       const data = await client.downloadProfilePhoto(target.id, {
         isBig: false,
@@ -236,12 +304,27 @@ class TelegramDriver implements ProviderDriver {
   }
 
   async listMessages(chatId: string, options: { limit?: number } = {}) {
-    if (!(await this.listChats()).some((chat) => chat.id === chatId))
-      throw new Error("Чат Telegram не найден.");
-    const messages = await this.ready().getMessages(chatId, {
-      limit: options.limit ?? 100,
-    });
-    return messages
+    return (await this.listHistoryPage(chatId, { limit: options.limit ?? 100 }))
+      .messages;
+  }
+
+  async listHistoryPage(
+    chatId: string,
+    { limit, cursor }: { limit: number; cursor?: string },
+  ) {
+    if (
+      !this.dialogIds.has(chatId) &&
+      !(await this.listChats()).some((chat) => chat.id === chatId)
+    )
+      throw new AdapterError("INVALID_OPTIONS", "Чат Telegram не найден.");
+    const offsetId = cursor === undefined ? 0 : Number(cursor);
+    if (!Number.isSafeInteger(offsetId) || offsetId < 0)
+      throw new AdapterError(
+        "INVALID_OPTIONS",
+        "Некорректный курсор Telegram.",
+      );
+    const page = await this.ready().getMessages(chatId, { limit, offsetId });
+    const messages = page
       .filter((message) => message instanceof Api.Message)
       .map((message) => {
         const normalized = normalizeMessage(message, this.options.accountId);
@@ -249,6 +332,10 @@ class TelegramDriver implements ProviderDriver {
           normalized.displayName = utils.getDisplayName(message.sender);
         return normalized;
       });
+    return {
+      messages,
+      nextCursor: page.length === limit ? String(page.at(-1)!.id) : undefined,
+    };
   }
 
   async sendMedia(
@@ -312,7 +399,10 @@ class TelegramDriver implements ProviderDriver {
         "INVALID_OPTIONS",
         "Некорректная ссылка медиа Telegram.",
       );
-    if (!(await this.listChats()).some((chat) => chat.id === value.chatId))
+    if (
+      !this.dialogIds.has(value.chatId) &&
+      !(await this.listChats()).some((chat) => chat.id === value.chatId)
+    )
       throw new AdapterError("INVALID_OPTIONS", "Чат Telegram не найден.");
     let exceededLimit = false;
     try {
@@ -439,6 +529,8 @@ class TelegramDriver implements ProviderDriver {
     this.removeUpdates = undefined;
     const client = this.client;
     this.client = undefined;
+    this.dialogIds.clear();
+    this.dialogLoad = undefined;
     try {
       if (client) await client.destroy();
     } finally {

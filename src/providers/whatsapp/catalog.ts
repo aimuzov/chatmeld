@@ -1,5 +1,6 @@
 import {
   jidNormalizedUser,
+  isJidMetaAI,
   type Contact,
   type proto,
 } from "@whiskeysockets/baileys";
@@ -72,8 +73,15 @@ export class WhatsAppCatalog {
       .map(([id, title]) => {
         const person = this.people.get(id);
         const name = person?.name || person?.notify || person?.verifiedName;
+        const phone =
+          /^([1-9]\d*)@s\.whatsapp\.net$/.exec(id) ??
+          /^([1-9]\d*)@s\.whatsapp\.net$/.exec(
+            jidNormalizedUser(person?.phoneNumber),
+          );
         return {
           id,
+          ...(phone ? { profileUrl: `https://wa.me/${phone[1]}` } : {}),
+          ...(isJidMetaAI(id) ? { isBot: true } : {}),
           title: (id.endsWith("@g.us") ? title : name || title) || id,
         };
       })

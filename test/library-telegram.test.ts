@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import bigInt from "big-integer";
 import { Api, TelegramClient } from "teleproto";
+import { Raw } from "teleproto/events";
 import { StringSession } from "teleproto/sessions";
 import { AuthFlow } from "../src/library/auth.js";
 import { readStored, writeStored } from "../src/library/storage.js";
@@ -218,7 +219,7 @@ test("Telegram history restores a private channel entity before requesting messa
     bot: false,
   }));
   t.mock.method(TelegramClient.prototype, "destroy", async () => undefined);
-  t.mock.method(
+  const dialogs = t.mock.method(
     TelegramClient.prototype,
     "iterDialogs",
     async function* (this: TelegramClient) {
@@ -236,10 +237,11 @@ test("Telegram history restores a private channel entity before requesting messa
         JSON.stringify(request.peer),
       );
       assert.equal(request.peer.accessHash.toString(), "98765");
+      const id = request.offsetId === 7 ? 6 : 7;
       return new Api.messages.Messages({
         messages: [
           new Api.Message({
-            id: 7,
+            id,
             peerId: new Api.PeerChannel({ channelId: bigInt(42) }),
             date: 1700000000,
             message: "Saved history",
@@ -258,7 +260,80 @@ test("Telegram history restores a private channel entity before requesting messa
     assert.equal(messages[0]?.text, "Saved history");
     assert.equal(messages[0]?.messageId, "-10042:7");
     assert.equal(messages[0]?.direction, "outgoing");
+    const first = await f.driver.listHistoryPage!("-10042", { limit: 1 });
+    assert.equal(first.nextCursor, "7");
+    const older = await f.driver.listHistoryPage!("-10042", {
+      limit: 1,
+      cursor: first.nextCursor,
+    });
+    assert.equal(older.messages[0]?.messageId, "-10042:6");
+    const download = t.mock.method(
+      TelegramClient.prototype,
+      "downloadProfilePhoto",
+      async () => Buffer.alloc(0),
+    );
+    await Promise.all([
+      f.driver.getAvatar!({ type: "chat", id: "-10042" }),
+      f.driver.getAvatar!({ type: "chat", id: "-10042" }),
+    ]);
+    assert.equal(download.mock.callCount(), 2);
+    assert.equal(dialogs.mock.callCount(), 1);
   } finally {
     await f.driver.disconnect();
   }
+});
+
+test("Telegram publishes read watermarks for private outbox updates", async (t) => {
+  const f = fixture();
+  await writeStored(f.storage, "telegram/session", { session: "" });
+  t.mock.method(TelegramClient.prototype, "connect", async () => true);
+  t.mock.method(
+    TelegramClient.prototype,
+    "checkAuthorization",
+    async () => true,
+  );
+  t.mock.method(TelegramClient.prototype, "getMe", async () => ({
+    bot: false,
+  }));
+  t.mock.method(TelegramClient.prototype, "destroy", async () => {});
+  let raw!: (update: Api.TypeUpdate) => Promise<void>;
+  t.mock.method(
+    TelegramClient.prototype,
+    "addEventHandler",
+    (handler: typeof raw, builder: unknown) => {
+      if (builder instanceof Raw) raw = handler;
+    },
+  );
+  t.mock.method(TelegramClient.prototype, "removeEventHandler", () => {});
+  const receipts: unknown[] = [];
+  f.context.onReceipt = (receipt) => {
+    receipts.push(receipt);
+  };
+  await f.driver.connect(f.context);
+  await raw(
+    new Api.UpdateReadHistoryOutbox({
+      peer: new Api.PeerUser({ userId: bigInt(42) }),
+      maxId: 17,
+      pts: 1,
+      ptsCount: 1,
+    }),
+  );
+  await raw(
+    new Api.UpdateReadHistoryOutbox({
+      peer: new Api.PeerChat({ chatId: bigInt(42) }),
+      maxId: 20,
+      pts: 1,
+      ptsCount: 1,
+    }),
+  );
+  assert.deepEqual(receipts, [
+    {
+      provider: "telegram",
+      accountId: "one",
+      chatId: "42",
+      status: "read",
+      throughMessageId: "42:17",
+    },
+  ]);
+  await f.driver.disconnect();
 });

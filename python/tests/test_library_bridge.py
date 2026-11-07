@@ -59,6 +59,9 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
             def on_message(self):
                 return lambda fn: fn
 
+            def on_message_read(self):
+                return lambda fn: fn
+
             def on_disconnect(self):
                 return lambda fn: fn
 

@@ -131,7 +131,13 @@ test("WhatsApp catalog survives serialization and partial contact updates", () =
   const restored = new WhatsAppCatalog();
   restored.restore(JSON.parse(JSON.stringify(catalog.snapshot())));
   restored.contacts([{ id: "79990000000@s.whatsapp.net", notify: "Иван" }]);
-  assert.deepEqual(restored.list(), [{ id: "42@lid", title: "Иван Иванов" }]);
+  assert.deepEqual(restored.list(), [
+    {
+      id: "42@lid",
+      title: "Иван Иванов",
+      profileUrl: "https://wa.me/79990000000",
+    },
+  ]);
 });
 
 test("WhatsApp joining two existing aliases does not discard a known contact name", () => {
@@ -143,7 +149,11 @@ test("WhatsApp joining two existing aliases does not discard a known contact nam
     { id: "42@lid", phoneNumber: "79990000000@s.whatsapp.net" },
   ]);
   assert.deepEqual(catalog.list(), [
-    { id: "79990000000@s.whatsapp.net", title: "Иван Иванов" },
+    {
+      id: "79990000000@s.whatsapp.net",
+      title: "Иван Иванов",
+      profileUrl: "https://wa.me/79990000000",
+    },
   ]);
 });
 

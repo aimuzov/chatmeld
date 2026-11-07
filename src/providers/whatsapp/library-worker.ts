@@ -81,6 +81,8 @@ port.on(
                         port.postMessage({ event: "progress", message }),
                     }
                   : undefined,
+              onReceipt: (receipt) =>
+                port.postMessage({ event: "receipt", receipt }),
               onMessage: (message) =>
                 port.postMessage({ event: "message", message }),
               onError: (error) =>
@@ -93,6 +95,14 @@ port.on(
             request.method === "authorize",
           );
         } else if (request.method === "chats") result = runtime!.listChats();
+        else if (request.method === "historyPage")
+          result = await runtime!.listHistoryPage(
+            request.params!.chatId as string,
+            {
+              limit: request.params!.limit as number,
+              cursor: request.params!.cursor as string | undefined,
+            },
+          );
         else if (request.method === "avatar")
           result = await runtime!.avatarUrl(
             request.params as unknown as AvatarTarget,
