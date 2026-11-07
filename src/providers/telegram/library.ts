@@ -246,8 +246,23 @@ class TelegramDriver implements ProviderDriver {
   private async loadDialogs(client: TelegramClient): Promise<Chat[]> {
     const chats: Chat[] = [];
     for await (const dialog of client.iterDialogs({})) {
+      const entity = dialog.entity;
+      const username =
+        entity instanceof Api.User || entity instanceof Api.Channel
+          ? entity.username
+          : undefined;
       if (dialog.id)
-        chats.push({ id: dialog.id.toString(), title: dialog.title ?? "" });
+        chats.push({
+          ...(username
+            ? {
+                profileUrl: `https://t.me/${encodeURIComponent(username)}?profile`,
+              }
+            : {}),
+          id: dialog.id.toString(),
+          title: dialog.title ?? "",
+          isBot:
+            dialog.entity instanceof Api.User && Boolean(dialog.entity.bot),
+        });
     }
     this.queueSession();
     await this.writes;

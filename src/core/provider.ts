@@ -3,6 +3,8 @@ export type ProviderKind = "telegram" | "max" | "whatsapp" | "vk" | "instagram";
 export interface Chat {
   id: string;
   title: string;
+  isBot?: boolean;
+  profileUrl?: string;
 }
 
 export interface MediaAttachment {

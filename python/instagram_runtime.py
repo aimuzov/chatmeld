@@ -166,6 +166,7 @@ class InstagramRuntime:
         self.client = None
         self.account_id = ''
         self.self_id = ''
+        self.suggested_bot_ids = None
         self.connected = False
         self.stopped = False
         self.seen = OrderedDict()
@@ -350,13 +351,25 @@ class InstagramRuntime:
             raise BridgeError('AUTH_REQUIRED')
         if method == 'chats':
             threads = self.client.direct_threads(amount=0, thread_message_limit=1)
+            if threads and self.suggested_bot_ids is None:
+                try:
+                    self.suggested_bot_ids = {str(user.pk) for user in self.client.direct_search_gen_ai_bots()}
+                except Exception:
+                    self.suggested_bot_ids = set()
             result = []
             for thread in threads:
                 title = getattr(thread, 'thread_title', None)
                 if not title:
                     title = ', '.join((getattr(user, 'full_name', None) or getattr(user, 'username', None) or str(user.pk))
                                       for user in thread.users if str(user.pk) != self.self_id)
-                result.append({'id': identifier(thread), 'title': title or identifier(thread)})
+                peers = [user for user in thread.users if str(user.pk) != self.self_id]
+                participants = {str(user.pk) for user in peers}
+                username = getattr(peers[0], "username", None) if len(peers) == 1 and not getattr(thread, "is_group", False) else None
+                bot = (not getattr(thread, "is_group", False) and len(participants) == 1
+                       and participants.issubset(self.suggested_bot_ids or set()))
+                result.append({"id": identifier(thread), "title": title or identifier(thread),
+                               **({"isBot": True} if bot else {}),
+                               **({"profileUrl": f"https://www.instagram.com/{username}/"} if username else {})})
         elif method == 'history':
             limit = max(1, min(100, int(params.get('limit', 50))))
             chat_id = str(params['chatId'])

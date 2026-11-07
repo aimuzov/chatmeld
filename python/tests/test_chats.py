@@ -46,3 +46,12 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
     async def test_unknown_contact_still_has_a_usable_chat_id(self):
         client = Contacts([])
         self.assertEqual(await list_named_chats(client, [dialog(45)]), [{"id": "45", "title": "45"}])
+
+    async def test_only_direct_bot_chat_is_classified(self):
+        client = Contacts([])
+        direct = dialog(45, title="Bot", hasBots=True)
+        group = dialog(100, type="CHAT", title="Group", hasBots=True)
+        self.assertEqual(await list_named_chats(client, [direct, group]), [
+            {"id": "45", "title": "Bot", "isBot": True},
+            {"id": "100", "title": "Group"},
+        ])

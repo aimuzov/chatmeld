@@ -89,5 +89,5 @@ export function normalizeMessage(
 }
 
 export function isChatId(id: string): boolean {
-  return /^\d+(?:-\d+)?@(s\.whatsapp\.net|lid|g\.us)$/.test(id);
+  return /^\d+(?:-\d+)?@(s\.whatsapp\.net|lid|g\.us|bot)$/.test(id);
 }

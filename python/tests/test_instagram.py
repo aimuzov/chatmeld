@@ -151,7 +151,11 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_chats_history_send(self):
         await self.connect()
-        self.assertEqual(await self.runtime.command('chats', {}), [{'id': CHAT, 'title': 'Friend Name'}])
+        self.assertEqual(await self.runtime.command('chats', {}), [{
+            'id': CHAT,
+            'title': 'Friend Name',
+            'profileUrl': 'https://www.instagram.com/friend/',
+        }])
         self.assertEqual(self.client.calls[-1], ('threads', {'amount': 0, 'thread_message_limit': 1}))
         history = await self.runtime.command('history', {'chatId': CHAT, 'limit': 999})
         self.assertEqual(history[0]['displayName'], 'Friend Name')
@@ -215,7 +219,11 @@ class RuntimeSafetyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.exception.code, 'UNSUPPORTED_OPERATION')
         self.assertTrue(self.runtime.connected)
         self.assertFalse(self.runtime.stopped)
-        self.assertEqual(await self.runtime.command('chats', {}), [{'id': CHAT, 'title': 'Friend Name'}])
+        self.assertEqual(await self.runtime.command('chats', {}), [{
+            'id': CHAT,
+            'title': 'Friend Name',
+            'profileUrl': 'https://www.instagram.com/friend/',
+        }])
 
     async def test_download_sdk_auth_and_network_errors_keep_their_codes(self):
         await self.connect()
