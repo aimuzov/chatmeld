@@ -229,6 +229,7 @@ await persistOutgoing({
   accountId: adapter.accountId,
   chatId: chat.id,
   messageId: sent.externalId,
+  sentAt: sent.sentAt,
   text: "Hello!",
 });
 ```
@@ -268,7 +269,7 @@ for (const message of recent) {
 }
 ```
 
-Use `listHistoryPage(chatId, { limit, cursor })` to load older messages on all five providers. Omit `cursor` on the first request, then pass `nextCursor` from the response until it is absent. WhatsApp needs an initial message from the linked device before it can request older messages.
+Use `listHistoryPage(chatId, { limit, cursor })` to load older messages on all five providers. Omit `cursor` on the first request, then pass `nextCursor` from the response until it is absent. WhatsApp needs an initial message for the requested chat before it can load older messages.
 
 `persistIncoming` stores a message in your database. Use `direction` to distinguish incoming and outgoing messages. Your project keeps durable history. Full synchronization and guaranteed gap recovery are outside the history API.
 
@@ -458,6 +459,8 @@ const removeState = adapter.onState((state) => {
 Subscribe with `adapter.onReceipt?.(handler)`. Handlers may be async; the returned function unsubscribes. The event contains `provider`, `accountId`, `chatId` and `status` (`delivered` or `read`). It targets exact `messageIds`, a numeric `throughMessageId` watermark or a `throughSentAt` timestamp watermark. Apply watermarks only to outgoing messages in the same account and chat. Save them even when the message has not been stored yet, and never downgrade a read message to delivered.
 
 WhatsApp reports delivery and read acknowledgements in direct chats. Telegram, VK and MAX report private-chat read watermarks; Telegram has no separate delivered-to-device status. Group acknowledgements are omitted because one participant does not confirm the whole group. Receipts are live events, not a backfill of confirmations missed while disconnected. MAX send results include the server message `sentAt` timestamp for matching its read watermark.
+
+Receipt and message handlers share a queue of 100 events. An overflowing queue or a failed handler closes the connection.
 
 ## Boundaries
 

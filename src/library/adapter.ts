@@ -369,7 +369,10 @@ export class Adapter implements MessagingAdapter {
   }
   listHistoryPage(chatId: string, options: { limit: number; cursor?: string }) {
     if (
+      typeof chatId !== "string" ||
       !chatId.trim() ||
+      !options ||
+      (options.cursor !== undefined && typeof options.cursor !== "string") ||
       !Number.isInteger(options.limit) ||
       options.limit < 1 ||
       options.limit > 100

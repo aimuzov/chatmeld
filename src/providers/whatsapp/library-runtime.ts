@@ -306,8 +306,8 @@ export class WhatsAppLibraryRuntime {
       else if (!requestId && early.size < 4) early.set(id, event.messages);
     };
     socket.ev.on("messaging-history.set", receive);
+    const timeout = AbortSignal.timeout(25_000);
     try {
-      const timeout = AbortSignal.timeout(25_000);
       const signal = this.context
         ? AbortSignal.any([timeout, this.context.signal])
         : timeout;
@@ -340,6 +340,13 @@ export class WhatsAppLibraryRuntime {
         messages,
         nextCursor: oldest ? JSON.stringify(asAnchor(oldest)) : undefined,
       };
+    } catch (error) {
+      if (timeout.aborted && !this.context?.signal.aborted)
+        throw new AdapterError(
+          "PROVIDER_ERROR",
+          "WhatsApp не ответил на запрос истории.",
+        );
+      throw error;
     } finally {
       socket.ev.off("messaging-history.set", receive);
     }

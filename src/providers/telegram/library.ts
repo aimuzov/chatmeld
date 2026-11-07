@@ -87,8 +87,15 @@ class TelegramDriver implements ProviderDriver {
       throw new Error("Некорректная сессия Telegram.");
     this.session = new StringSession(stored?.session ?? "");
     const proxy = process.env.CHATMELD_TELEGRAM_SOCKS;
-    const route = proxy ? new URL(proxy) : undefined;
-    if (route && (route.protocol !== "socks5:" || !route.port))
+    const route = proxy ? URL.parse(proxy) : undefined;
+    if (
+      proxy &&
+      (!route ||
+        route.protocol !== "socks5:" ||
+        !route.port ||
+        route.username ||
+        route.password)
+    )
       throw new AdapterError(
         "INVALID_OPTIONS",
         "Неверный адрес SOCKS5 для Telegram.",
