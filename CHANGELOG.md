@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0](https://github.com/aimuzov/chatmeld/compare/v0.2.0...v0.3.0) (2026-11-07)
+
+
+### Features
+
+* expand Chatmeld messaging and history support ([cb7ebf2](https://github.com/aimuzov/chatmeld/commit/cb7ebf2ea594bc78ddf53988ff23c55768d7afcc))
+* expose chat profile links and bot markers ([629d620](https://github.com/aimuzov/chatmeld/commit/629d6205fe4c29ff9b56ecddc674f51bcf0dd8da)), closes [#18](https://github.com/aimuzov/chatmeld/issues/18)
+* expose message delivery and read receipts ([28e6221](https://github.com/aimuzov/chatmeld/commit/28e622168e27b9e56032a197eab00597b1069e07)), closes [#16](https://github.com/aimuzov/chatmeld/issues/16)
+* paginate message history across providers ([8920887](https://github.com/aimuzov/chatmeld/commit/8920887435790c2dbeb588ee5a52106d06544669)), closes [#15](https://github.com/aimuzov/chatmeld/issues/15)
+* support Telegram and WhatsApp proxies ([5feb054](https://github.com/aimuzov/chatmeld/commit/5feb0543f7e5c172e5800f82867bd7f6ecc47856)), closes [#19](https://github.com/aimuzov/chatmeld/issues/19)
+* **vk:** support community messaging and voice attachments ([d949ac9](https://github.com/aimuzov/chatmeld/commit/d949ac9139c20402302dd9dde971a9c221915d1f)), closes [#20](https://github.com/aimuzov/chatmeld/issues/20)
+
+
+### Bug Fixes
+
+* **telegram:** reuse loaded dialogs for avatar requests ([278007a](https://github.com/aimuzov/chatmeld/commit/278007aad1a769a1955448c0864f0994b62e6ddc)), closes [#14](https://github.com/aimuzov/chatmeld/issues/14)
+* validate history and proxy options ([61b7b4b](https://github.com/aimuzov/chatmeld/commit/61b7b4bb7c3ad36aa7adb7597815f0a70f92f4b1))
+* **whatsapp:** reject proxies on unsupported Node versions ([8ee6ee0](https://github.com/aimuzov/chatmeld/commit/8ee6ee02ca8f11bfd23a74d8f085b26bfaf58f8b)), closes [#19](https://github.com/aimuzov/chatmeld/issues/19)
+* **whatsapp:** send serializable worker options ([f9c7138](https://github.com/aimuzov/chatmeld/commit/f9c7138d516adc611ff6912a00051af9885c5242)), closes [#17](https://github.com/aimuzov/chatmeld/issues/17)
+
 ## [0.2.0](https://github.com/aimuzov/chatmeld/compare/v0.1.1...v0.2.0) (2026-11-03)
 
 
