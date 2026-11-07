@@ -268,7 +268,11 @@ for (const message of recent) {
 }
 ```
 
-`persistIncoming` here stores a message in your database; respect `direction`, since history includes outgoing messages. Your project keeps durable history. There is no full synchronization, pagination or guaranteed gap recovery.
+Use `listHistoryPage(chatId, { limit, cursor })` to load older messages on all five providers. Omit `cursor` on the first request, then pass `nextCursor` from the response until it is absent. WhatsApp needs an initial message from the linked device before it can request older messages.
+
+`persistIncoming` stores a message in your database. Use `direction` to distinguish incoming and outgoing messages. Your project keeps durable history. Full synchronization and guaranteed gap recovery are outside the history API.
+
+Set `CHATMELD_TELEGRAM_SOCKS` to a SOCKS5 URL with an explicit port for Telegram. Set `HTTPS_PROXY` for the WhatsApp WebSocket connection. The WhatsApp proxy requires Node.js 24.5 or later.
 
 ## Instagram
 
