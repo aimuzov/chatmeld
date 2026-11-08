@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 from pymax import ExtraConfig, QrAuthFlow, WebClient, Photo, Video, File
 from chats import list_named_chats
-from normalize import normalize_message, normalize_read_receipt
+from normalize import MAX_FORWARD_DEPTH, forwarded_message, normalize_message, normalize_read_receipt
 from library_store import RpcStore, StorageRpc
 
 OUTPUT = sys.stdout
@@ -200,7 +200,12 @@ class Bridge:
             if type(index) is not int or index < 0:
                 raise ValueError("Invalid MAX media reference")
             chat_id, message_id = int(payload["chatId"]), int(payload["messageId"])
+            depth = payload.get("forwardDepth", 0)
+            if type(depth) is not int or not 0 <= depth <= MAX_FORWARD_DEPTH:
+                raise ValueError("Invalid MAX media reference")
             message = await self.client.get_message(chat_id, message_id)
+            for _ in range(depth):
+                message = forwarded_message(message)
             if message is None or index >= len(message.attaches):
                 raise UnsupportedOperation("MAX media unavailable")
             item = message.attaches[index]
