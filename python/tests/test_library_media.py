@@ -132,3 +132,41 @@ class MediaTests(unittest.IsolatedAsyncioTestCase):
         result = normalize_message(message, "personal", 74)
         self.assertEqual(result["attachments"], [{"kind": "audio", "referencePayload": {
             "chatId": "-42", "messageId": "9007199254740993", "index": 0}}])
+
+
+    async def test_forwarded_photo_and_file_use_the_outer_message_reference(self):
+        message = Message.model_validate({"id": 42, "chatId": 10, "sender": 74,
+            "text": "", "time": 1700000000000, "type": "USER",
+            "link": {"type": "FORWARD", "chatId": 11, "message": {
+                "id": 43, "sender": 73, "text": "Caption", "time": 1699999999000,
+                "type": "USER", "attaches": [
+                    {"_type": "PHOTO", "baseUrl": "https://i.oneme.ru/photo", "photoId": 1, "height": 1, "width": 1, "photoToken": "photo-token"},
+                    {"_type": "FILE", "fileId": 2, "name": "sample.pdf", "size": 24, "token": "file-token"},
+                ],
+            }}})
+        for own_id, history_chat_id, direction in ((73, None, "incoming"),
+                (74, None, "outgoing"), (74, 10, "outgoing")):
+            result = normalize_message(message, "personal", own_id, history_chat_id=history_chat_id)
+            self.assertEqual(result["direction"], direction)
+            self.assertEqual(result["messageId"], "10:42")
+            self.assertEqual(result["senderId"], "74")
+            self.assertEqual(result["text"], "Caption")
+            self.assertEqual([a["kind"] for a in result["attachments"]], ["photo", "file"])
+
+        bridge = self.bridge()
+        bridge.client.get_message.return_value = message
+        bridge.client.get_file_by_id.return_value = SimpleNamespace(url="https://files.oneme.ru/sample")
+        photo, file = result["attachments"]
+        self.assertEqual(photo["referencePayload"], {"chatId": "10", "messageId": "42", "index": 0, "forwardDepth": 1})
+        self.assertEqual((await bridge.command("downloadMedia", {"payload": photo["referencePayload"]}))["mimeType"], "image/jpeg")
+        self.assertEqual((await bridge.command("downloadMedia", {"payload": file["referencePayload"]}))["fileName"], "sample.pdf")
+        bridge.client.get_file_by_id.assert_awaited_once_with(10, 42, 2)
+        with self.assertRaisesRegex(RuntimeError, "unavailable"):
+            await bridge.command("downloadMedia", {"payload": {**file["referencePayload"], "forwardDepth": 2}})
+
+    def test_reply_does_not_copy_quoted_content(self):
+        original = SimpleNamespace(text="quoted", attaches=[], link=None)
+        message = SimpleNamespace(id=42, chat_id=10, sender=73, time=1700000000000,
+                                  text="reply", attaches=[], link=SimpleNamespace(type="REPLY", message=original))
+        result = normalize_message(message, "personal", 74)
+        self.assertEqual(result["text"], "reply")
