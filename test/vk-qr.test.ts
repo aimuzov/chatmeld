@@ -6,7 +6,7 @@ import {
 } from "../src/providers/vk/qr-helpers.js";
 import QRCode from "qrcode";
 import { chromium, type Browser } from "playwright";
-import { loginWithVkQr } from "../src/providers/vk/qr.js";
+import { loginWithVkQr, restoreVkSession } from "../src/providers/vk/qr.js";
 
 test("VK QR accepts tokens only from trusted VK API message requests", () => {
   const token = "vk1.a." + "a".repeat(64);
@@ -319,3 +319,54 @@ for (const host of ["api.vk.ru", "web.api.vk.ru"])
       assert.equal(fixture.browser.isConnected(), false);
     },
   );
+
+test(
+  "VK restores browser state and captures a new token without showing QR",
+  { timeout: 15000 },
+  async () => {
+    const previousToken = "vk1.a." + "a".repeat(64);
+    const token = "vk1.a." + "b".repeat(64);
+    const state = {
+      cookies: [],
+      origins: [
+        {
+          origin: "https://vk.ru",
+          localStorage: [{ name: "fixture-session", value: "active" }],
+        },
+      ],
+    };
+    let browser: Browser | undefined;
+    const result = await restoreVkSession({
+      state,
+      previousToken,
+      signal: new AbortController().signal,
+      timeout: 8000,
+      launch: async (storageState) => {
+        browser = await chromium.launch({ headless: true });
+        const context = await browser.newContext({ storageState });
+        await context.route("https://vk.ru/im", (route) =>
+          route.fulfill({
+            contentType: "text/html",
+            body: `<script>
+          const send = token => fetch('https://api.vk.ru/method/messages.getConversations', {method:'POST',body:'access_token='+token});
+          send('${previousToken}');
+          if (localStorage.getItem('fixture-session') === 'active') {
+            localStorage.setItem('fixture-session', 'renewed');
+            send('${token}');
+          }
+        </script>`,
+          }),
+        );
+        await context.route("https://api.vk.ru/**", (route) =>
+          route.fulfill({ status: 200 }),
+        );
+        return { browser, context };
+      },
+    });
+    assert.equal(result?.token, token);
+    assert.deepEqual(result?.state.origins[0]?.localStorage, [
+      { name: "fixture-session", value: "renewed" },
+    ]);
+    assert.equal(browser?.isConnected(), false);
+  },
+);

@@ -10,7 +10,27 @@ import { decodeVkQr, tokenFromVkRequest } from "./qr-helpers.js";
 
 type BrowserSession = { browser: Browser; context: BrowserContext };
 
-async function launchSession(): Promise<BrowserSession> {
+export type VkBrowserState = Awaited<
+  ReturnType<BrowserContext["storageState"]>
+>;
+
+function isVkHost(host: string): boolean {
+  return /(?:^|\.)vk\.(?:ru|com)$/i.test(host);
+}
+
+async function captureState(context: BrowserContext): Promise<VkBrowserState> {
+  const state = await context.storageState({ indexedDB: true });
+  return {
+    cookies: state.cookies.filter((cookie) => isVkHost(cookie.domain)),
+    origins: state.origins.filter(({ origin }) =>
+      isVkHost(new URL(origin).hostname),
+    ),
+  };
+}
+
+async function launchSession(
+  storageState?: VkBrowserState,
+): Promise<BrowserSession> {
   try {
     const browser = await chromium.launch({ headless: true });
     try {
@@ -18,6 +38,7 @@ async function launchSession(): Promise<BrowserSession> {
         browser,
         context: await browser.newContext({
           viewport: { width: 1280, height: 900 },
+          storageState,
         }),
       };
     } catch (error) {
@@ -160,6 +181,7 @@ export async function loginWithVkQr(options: {
   requestCode?: (signal: AbortSignal) => Promise<string>;
   onStatus?: (status: "code-entered" | "opening-messages") => void;
   launch?: () => Promise<BrowserSession>;
+  onSession?: (state: VkBrowserState) => void;
   timeout?: number;
 }): Promise<string> {
   options.signal.throwIfAborted();
@@ -193,7 +215,10 @@ export async function loginWithVkQr(options: {
     });
     while (Date.now() < deadline) {
       options.signal.throwIfAborted();
-      if (candidate) return candidate;
+      if (candidate) {
+        if (options.onSession) options.onSession(await captureState(context));
+        return candidate;
+      }
       if (
         lastQr &&
         (await page
@@ -259,6 +284,53 @@ export async function loginWithVkQr(options: {
     throw new Error(
       "Не удалось завершить QR-вход VK через страницу входа. Повторите команду; если VK требует дополнительную проверку, завершите её в приложении на телефоне.",
     );
+  } finally {
+    options.signal.removeEventListener("abort", abort);
+    await browser.close().catch(() => undefined);
+  }
+}
+
+export async function restoreVkSession(options: {
+  state: VkBrowserState;
+  previousToken: string;
+  signal: AbortSignal;
+  launch?: (state: VkBrowserState) => Promise<BrowserSession>;
+  timeout?: number;
+}): Promise<{ token: string; state: VkBrowserState } | undefined> {
+  options.signal.throwIfAborted();
+  const timeout = options.timeout ?? 25_000;
+  const deadline = Date.now() + timeout;
+  const { browser, context } = await (options.launch ?? launchSession)(
+    options.state,
+  );
+  const abort = () => {
+    void browser.close().catch(() => undefined);
+  };
+  options.signal.addEventListener("abort", abort, { once: true });
+  try {
+    options.signal.throwIfAborted();
+    let token: string | undefined;
+    context.on("request", (request) => {
+      if (token) return;
+      const candidate = tokenFromVkRequest(
+        request.url(),
+        request.postData(),
+        request.headers().authorization,
+      );
+      if (candidate && candidate !== options.previousToken) token = candidate;
+    });
+    const page = await context.newPage();
+    await page.goto("https://vk.ru/im", {
+      waitUntil: "domcontentloaded",
+      timeout,
+    });
+    while (!token && Date.now() < deadline) {
+      const location = new URL(page.url());
+      if (!isVkHost(location.hostname)) return;
+      await delay(200, undefined, { signal: options.signal });
+    }
+    options.signal.throwIfAborted();
+    if (token) return { token, state: await captureState(context) };
   } finally {
     options.signal.removeEventListener("abort", abort);
     await browser.close().catch(() => undefined);
