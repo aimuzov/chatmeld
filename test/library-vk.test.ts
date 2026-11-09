@@ -335,6 +335,7 @@ test("VK renews an expired token once for concurrent requests and persists the v
     restores++;
     assert.deepEqual(options.state, browser);
     assert.equal(options.previousToken, "old-token");
+    assert.equal(await options.validate("new-token", options.signal), true);
     return { token: "new-token", state: browser };
   });
   await writeStored(f.context.storage, "vk/token", {

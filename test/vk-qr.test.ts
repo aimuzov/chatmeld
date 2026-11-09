@@ -326,6 +326,8 @@ test(
   async () => {
     const previousToken = "vk1.a." + "a".repeat(64);
     const token = "vk1.a." + "b".repeat(64);
+    const wrongToken = "vk1.a." + "d".repeat(64);
+    const tried: string[] = [];
     const state = {
       cookies: [],
       origins: [
@@ -339,6 +341,10 @@ test(
     const result = await restoreVkSession({
       state,
       previousToken,
+      validate: async (candidate) => {
+        tried.push(candidate);
+        return candidate === token;
+      },
       signal: new AbortController().signal,
       timeout: 8000,
       launch: async (storageState) => {
@@ -352,7 +358,8 @@ test(
           send('${previousToken}');
           if (localStorage.getItem('fixture-session') === 'active') {
             localStorage.setItem('fixture-session', 'renewed');
-            send('${token}');
+            send('${wrongToken}');
+            setTimeout(() => send('${token}'), 250);
           }
         </script>`,
           }),
@@ -364,6 +371,7 @@ test(
       },
     });
     assert.equal(result?.token, token);
+    assert.deepEqual(tried, [wrongToken, token]);
     assert.deepEqual(result?.state.origins[0]?.localStorage, [
       { name: "fixture-session", value: "renewed" },
     ]);

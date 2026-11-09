@@ -175,26 +175,33 @@ class VkDriver implements ProviderDriver {
                 state: browser!,
                 previousToken,
                 signal,
+                validate: async (token, validationSignal) => {
+                  const candidate = new CancellableVkApi(
+                    { ...apiOptions, token },
+                    () => validationSignal,
+                  );
+                  try {
+                    const users = await candidate.users.get({});
+                    if (users.length !== 1 || users[0]?.id !== userId)
+                      return false;
+                    await candidate.messages.getConversations({ count: 1 });
+                    return true;
+                  } catch (error) {
+                    if (
+                      [5, 7, 15].includes(
+                        (error as { code?: number })?.code ?? 0,
+                      )
+                    )
+                      return false;
+                    throw error;
+                  }
+                },
               });
-              const required = () =>
-                new AdapterError(
+              if (!restored)
+                throw new AdapterError(
                   "AUTH_REQUIRED",
                   "Веб-сессия VK истекла. Повторите вход по QR.",
                 );
-              if (!restored) throw required();
-              const candidate = new CancellableVkApi(
-                { ...apiOptions, token: restored.token },
-                () => signal,
-              );
-              try {
-                const users = await candidate.users.get({});
-                if (users.length !== 1 || users[0]?.id !== userId)
-                  throw required();
-                await candidate.messages.getConversations({ count: 1 });
-              } catch (error) {
-                if ((error as { code?: unknown })?.code === 5) throw required();
-                throw error;
-              }
               signal.throwIfAborted();
               await writeStored(context.storage, key, {
                 token: restored.token,

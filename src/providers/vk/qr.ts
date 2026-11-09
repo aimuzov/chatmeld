@@ -293,46 +293,58 @@ export async function loginWithVkQr(options: {
 export async function restoreVkSession(options: {
   state: VkBrowserState;
   previousToken: string;
+  validate: (token: string, signal: AbortSignal) => Promise<boolean>;
   signal: AbortSignal;
   launch?: (state: VkBrowserState) => Promise<BrowserSession>;
   timeout?: number;
 }): Promise<{ token: string; state: VkBrowserState } | undefined> {
   options.signal.throwIfAborted();
   const timeout = options.timeout ?? 25_000;
-  const deadline = Date.now() + timeout;
+  const budget = AbortSignal.timeout(timeout);
+  const signal = AbortSignal.any([options.signal, budget]);
   const { browser, context } = await (options.launch ?? launchSession)(
     options.state,
   );
   const abort = () => {
     void browser.close().catch(() => undefined);
   };
-  options.signal.addEventListener("abort", abort, { once: true });
+  signal.addEventListener("abort", abort, { once: true });
   try {
-    options.signal.throwIfAborted();
-    let token: string | undefined;
+    signal.throwIfAborted();
+    const candidates = new Set<string>();
+    const rejected = new Set([options.previousToken]);
     context.on("request", (request) => {
-      if (token) return;
       const candidate = tokenFromVkRequest(
         request.url(),
         request.postData(),
         request.headers().authorization,
       );
-      if (candidate && candidate !== options.previousToken) token = candidate;
+      if (candidate && !rejected.has(candidate)) candidates.add(candidate);
     });
     const page = await context.newPage();
     await page.goto("https://vk.ru/im", {
       waitUntil: "domcontentloaded",
       timeout,
     });
-    while (!token && Date.now() < deadline) {
+    while (!signal.aborted) {
       const location = new URL(page.url());
       if (!isVkHost(location.hostname)) return;
-      await delay(200, undefined, { signal: options.signal });
+      for (const token of candidates) {
+        signal.throwIfAborted();
+        candidates.delete(token);
+        rejected.add(token);
+        if (await options.validate(token, signal)) {
+          signal.throwIfAborted();
+          return { token, state: await captureState(context) };
+        }
+      }
+      await delay(200, undefined, { signal });
     }
     options.signal.throwIfAborted();
-    if (token) return { token, state: await captureState(context) };
+  } catch (error) {
+    if (!budget.aborted || options.signal.aborted) throw error;
   } finally {
-    options.signal.removeEventListener("abort", abort);
+    signal.removeEventListener("abort", abort);
     await browser.close().catch(() => undefined);
   }
 }
