@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Upload } from "vk-io";
 import { createVkDriver } from "../src/providers/vk/library.js";
-import { writeStored } from "../src/library/storage.js";
+import { readStored, writeStored } from "../src/library/storage.js";
 import type { DriverContext, SessionStorage } from "../src/library/types.js";
 
-async function fixture(token?: string) {
+async function fixture(
+  token?: string,
+  restore?: Parameters<typeof createVkDriver>[1],
+) {
   const entries = new Map<string, Uint8Array>();
   const storage: SessionStorage = {
     async read(key) {
@@ -25,7 +28,7 @@ async function fixture(token?: string) {
     onMessage() {},
     onError() {},
   };
-  return { context, driver: createVkDriver({ accountId: "one" }) };
+  return { context, driver: createVkDriver({ accountId: "one" }, restore) };
 }
 
 test("VK restore never initiates login when storage has no session", async () => {
@@ -323,4 +326,62 @@ test("VK community authorizes with a key, lists chats, receives and replies", as
   assert.deepEqual(incoming, ["Вопрос"]);
   await driver.disconnect();
   await driver.connect(context);
+});
+
+test("VK renews an expired token once for concurrent requests and persists the verified session", async (t) => {
+  const browser = { cookies: [], origins: [] };
+  let restores = 0;
+  const f = await fixture("old-token", async (options) => {
+    restores++;
+    assert.deepEqual(options.state, browser);
+    assert.equal(options.previousToken, "old-token");
+    assert.equal(await options.validate("new-token", options.signal), true);
+    return { token: "new-token", state: browser };
+  });
+  await writeStored(f.context.storage, "vk/token", {
+    token: "old-token",
+    browser,
+    userId: 42,
+  });
+  let expired = false;
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async (url: string | URL, options: RequestInit) => {
+      if (String(url).startsWith("https://lp.vk.ru/"))
+        return new Promise<Response>((_, reject) =>
+          options.signal!.addEventListener(
+            "abort",
+            () => reject(Error("aborted")),
+            { once: true },
+          ),
+        );
+      const method = String(url).split("/").at(-1);
+      const token = (options.body as URLSearchParams).get("access_token");
+      if (token === "old-token" && expired)
+        return Response.json({
+          error: { error_code: 5, error_msg: "expired" },
+        });
+      if (method === "users.get")
+        return Response.json({ response: [{ id: 42 }] });
+      if (method === "messages.getLongPollServer")
+        return Response.json({
+          response: { server: "lp.vk.ru/test", key: "key", ts: "1" },
+        });
+      return Response.json({ response: { count: 0, items: [] } });
+    },
+  );
+  try {
+    await f.driver.connect(f.context);
+    expired = true;
+    await Promise.all([f.driver.listChats(), f.driver.listChats()]);
+    assert.equal(restores, 1);
+    assert.deepEqual(await readStored(f.context.storage, "vk/token"), {
+      token: "new-token",
+      browser,
+      userId: 42,
+    });
+  } finally {
+    await f.driver.disconnect();
+  }
 });

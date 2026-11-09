@@ -10,7 +10,27 @@ import { decodeVkQr, tokenFromVkRequest } from "./qr-helpers.js";
 
 type BrowserSession = { browser: Browser; context: BrowserContext };
 
-async function launchSession(): Promise<BrowserSession> {
+export type VkBrowserState = Awaited<
+  ReturnType<BrowserContext["storageState"]>
+>;
+
+function isVkHost(host: string): boolean {
+  return /(?:^|\.)vk\.(?:ru|com)$/i.test(host);
+}
+
+async function captureState(context: BrowserContext): Promise<VkBrowserState> {
+  const state = await context.storageState({ indexedDB: true });
+  return {
+    cookies: state.cookies.filter((cookie) => isVkHost(cookie.domain)),
+    origins: state.origins.filter(({ origin }) =>
+      isVkHost(new URL(origin).hostname),
+    ),
+  };
+}
+
+async function launchSession(
+  storageState?: VkBrowserState,
+): Promise<BrowserSession> {
   try {
     const browser = await chromium.launch({ headless: true });
     try {
@@ -18,6 +38,7 @@ async function launchSession(): Promise<BrowserSession> {
         browser,
         context: await browser.newContext({
           viewport: { width: 1280, height: 900 },
+          storageState,
         }),
       };
     } catch (error) {
@@ -160,6 +181,7 @@ export async function loginWithVkQr(options: {
   requestCode?: (signal: AbortSignal) => Promise<string>;
   onStatus?: (status: "code-entered" | "opening-messages") => void;
   launch?: () => Promise<BrowserSession>;
+  onSession?: (state: VkBrowserState) => void;
   timeout?: number;
 }): Promise<string> {
   options.signal.throwIfAborted();
@@ -193,7 +215,10 @@ export async function loginWithVkQr(options: {
     });
     while (Date.now() < deadline) {
       options.signal.throwIfAborted();
-      if (candidate) return candidate;
+      if (candidate) {
+        if (options.onSession) options.onSession(await captureState(context));
+        return candidate;
+      }
       if (
         lastQr &&
         (await page
@@ -261,6 +286,65 @@ export async function loginWithVkQr(options: {
     );
   } finally {
     options.signal.removeEventListener("abort", abort);
+    await browser.close().catch(() => undefined);
+  }
+}
+
+export async function restoreVkSession(options: {
+  state: VkBrowserState;
+  previousToken: string;
+  validate: (token: string, signal: AbortSignal) => Promise<boolean>;
+  signal: AbortSignal;
+  launch?: (state: VkBrowserState) => Promise<BrowserSession>;
+  timeout?: number;
+}): Promise<{ token: string; state: VkBrowserState } | undefined> {
+  options.signal.throwIfAborted();
+  const timeout = options.timeout ?? 25_000;
+  const budget = AbortSignal.timeout(timeout);
+  const signal = AbortSignal.any([options.signal, budget]);
+  const { browser, context } = await (options.launch ?? launchSession)(
+    options.state,
+  );
+  const abort = () => {
+    void browser.close().catch(() => undefined);
+  };
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    signal.throwIfAborted();
+    const candidates = new Set<string>();
+    const rejected = new Set([options.previousToken]);
+    context.on("request", (request) => {
+      const candidate = tokenFromVkRequest(
+        request.url(),
+        request.postData(),
+        request.headers().authorization,
+      );
+      if (candidate && !rejected.has(candidate)) candidates.add(candidate);
+    });
+    const page = await context.newPage();
+    await page.goto("https://vk.ru/im", {
+      waitUntil: "domcontentloaded",
+      timeout,
+    });
+    while (!signal.aborted) {
+      const location = new URL(page.url());
+      if (!isVkHost(location.hostname)) return;
+      for (const token of candidates) {
+        signal.throwIfAborted();
+        candidates.delete(token);
+        rejected.add(token);
+        if (await options.validate(token, signal)) {
+          signal.throwIfAborted();
+          return { token, state: await captureState(context) };
+        }
+      }
+      await delay(200, undefined, { signal });
+    }
+    options.signal.throwIfAborted();
+  } catch (error) {
+    if (!budget.aborted || options.signal.aborted) throw error;
+  } finally {
+    signal.removeEventListener("abort", abort);
     await browser.close().catch(() => undefined);
   }
 }

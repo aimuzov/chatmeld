@@ -34,7 +34,9 @@ import {
   vkDocumentMime,
 } from "./normalize.js";
 import { CancellableVkApi } from "./api.js";
-import { loginWithVkQr } from "./qr.js";
+import { loginWithVkQr, restoreVkSession, type VkBrowserState } from "./qr.js";
+
+type VkSession = { token: string; browser?: VkBrowserState; userId?: number };
 
 function vkError(error: unknown, communityId?: number): Error {
   if (error instanceof AdapterError) return error;
@@ -59,11 +61,11 @@ function vkError(error: unknown, communityId?: number): Error {
   );
 }
 
-export function createVkDriver(options: {
-  accountId: string;
-  communityId?: number;
-}): ProviderDriver {
-  return new VkDriver(options.accountId, options.communityId);
+export function createVkDriver(
+  options: { accountId: string; communityId?: number },
+  restore = restoreVkSession,
+): ProviderDriver {
+  return new VkDriver(options.accountId, options.communityId, restore);
 }
 
 class VkDriver implements ProviderDriver {
@@ -76,7 +78,8 @@ class VkDriver implements ProviderDriver {
 
   constructor(
     private accountId: string,
-    private communityId?: number,
+    private communityId: number | undefined,
+    private restore: typeof restoreVkSession,
   ) {
     if (
       communityId !== undefined &&
@@ -105,6 +108,18 @@ class VkDriver implements ProviderDriver {
     this.removeAbort = () => context.signal.removeEventListener("abort", abort);
     try {
       let token: string;
+      let browser: VkBrowserState | undefined;
+      let userId: number | undefined;
+      const key = this.communityId
+        ? `vk/community/${this.communityId}/token`
+        : "vk/token";
+      const signal = this.stop.signal;
+      const apiOptions = {
+        apiVersion: "5.199",
+        apiTimeout: 15000,
+        apiRetryLimit: 0,
+        apiMode: "sequential" as const,
+      };
       if (authorize) {
         if (!context.auth)
           throw new AdapterError(
@@ -124,6 +139,9 @@ class VkDriver implements ProviderDriver {
           : await loginWithVkQr({
               signal: this.stop.signal,
               onQr: (value) => context.auth!.qr(value),
+              onSession: (state) => {
+                browser = state;
+              },
               requestCode: (signal) =>
                 abortable(
                   context.auth!.challenge({
@@ -141,27 +159,60 @@ class VkDriver implements ProviderDriver {
                 ),
             });
       } else {
-        const stored = await readStored<{ token: string }>(
-          context.storage,
-          this.communityId
-            ? `vk/community/${this.communityId}/token`
-            : "vk/token",
-        );
+        const stored = await readStored<VkSession>(context.storage, key);
         if (!stored)
           throw new AdapterError("AUTH_REQUIRED", "Нет сохранённой сессии VK.");
         if (typeof stored.token !== "string" || !stored.token)
           throw new AdapterError("STORAGE_ERROR", "Некорректная сессия VK.");
-        token = stored.token;
+        ({ token, browser, userId } = stored);
       }
       const api = new CancellableVkApi(
-        {
-          token,
-          apiVersion: "5.199",
-          apiTimeout: 15000,
-          apiRetryLimit: 0,
-          apiMode: "sequential",
-        },
-        () => this.stop.signal,
+        { ...apiOptions, token },
+        () => signal,
+        !this.communityId && browser
+          ? async (previousToken) => {
+              const restored = await this.restore({
+                state: browser!,
+                previousToken,
+                signal,
+                validate: async (token, validationSignal) => {
+                  const candidate = new CancellableVkApi(
+                    { ...apiOptions, token },
+                    () => validationSignal,
+                  );
+                  try {
+                    const users = await candidate.users.get({});
+                    if (users.length !== 1 || users[0]?.id !== userId)
+                      return false;
+                    await candidate.messages.getConversations({ count: 1 });
+                    return true;
+                  } catch (error) {
+                    if (
+                      [5, 7, 15].includes(
+                        (error as { code?: number })?.code ?? 0,
+                      )
+                    )
+                      return false;
+                    throw error;
+                  }
+                },
+              });
+              if (!restored)
+                throw new AdapterError(
+                  "AUTH_REQUIRED",
+                  "Веб-сессия VK истекла. Повторите вход по QR.",
+                );
+              signal.throwIfAborted();
+              await writeStored(context.storage, key, {
+                token: restored.token,
+                browser: restored.state,
+                userId,
+              });
+              browser = restored.state;
+              token = restored.token;
+              return token;
+            }
+          : undefined,
       );
       const upload = new Upload({ api });
       this.vk = { api, upload, updates: new Updates({ api, upload }) };
@@ -179,6 +230,7 @@ class VkDriver implements ProviderDriver {
             "AUTH_REQUIRED",
             "Для VK нужен личный аккаунт.",
           );
+        userId = users[0].id;
       }
       await api.messages.getConversations({ count: 1, ...this.groupParams });
       const communityServer = this.communityId
@@ -186,13 +238,7 @@ class VkDriver implements ProviderDriver {
         : undefined;
       context.signal.throwIfAborted();
       if (authorize)
-        await writeStored(
-          context.storage,
-          this.communityId
-            ? `vk/community/${this.communityId}/token`
-            : "vk/token",
-          { token },
-        );
+        await writeStored(context.storage, key, { token, browser, userId });
       this.vk.updates.on(
         "message_new",
         async (messageContext: MessageContext) => {
@@ -224,7 +270,6 @@ class VkDriver implements ProviderDriver {
           throughMessageId: `${chatId}:${event.localId}`,
         });
       });
-      const signal = this.stop.signal;
       this.polling = this.poll(signal, communityServer).catch(
         (error: unknown) => {
           if (!signal.aborted) {

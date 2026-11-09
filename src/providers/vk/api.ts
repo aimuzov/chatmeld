@@ -2,9 +2,11 @@ import { API, APIError, type APIRequest } from "vk-io";
 import { setTimeout as delay } from "node:timers/promises";
 
 export class CancellableVkApi extends API {
+  private refreshing?: Promise<void>;
   constructor(
     options: ConstructorParameters<typeof API>[0],
     private signal: () => AbortSignal,
+    private refreshToken?: (token: string) => Promise<string>,
   ) {
     super(options);
   }
@@ -25,6 +27,7 @@ export class CancellableVkApi extends API {
               : String(value),
         );
     }
+    let refreshed = false;
     for (let attempt = 0; ; attempt++) {
       const signal = this.signal();
       const response = await fetch(
@@ -45,6 +48,21 @@ export class CancellableVkApi extends API {
         error?: { error_code: number; error_msg: string };
       };
       if (value.error) {
+        if (value.error.error_code === 5 && this.refreshToken && !refreshed) {
+          refreshed = true;
+          if (body.get("access_token") === this.options.token) {
+            this.refreshing ??= this.refreshToken(this.options.token)
+              .then((token) => {
+                this.options.token = token;
+              })
+              .finally(() => {
+                this.refreshing = undefined;
+              });
+            await this.refreshing;
+          }
+          body.set("access_token", this.options.token);
+          continue;
+        }
         if (value.error.error_code === 6 && attempt < 2) {
           await delay(500 * (attempt + 1), undefined, { signal });
           continue;
