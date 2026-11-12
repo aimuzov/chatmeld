@@ -9,6 +9,8 @@ on:
 
 permissions:
   contents: read
+  actions: read
+  id-token: write
 
 jobs:
   check:
@@ -19,20 +21,45 @@ jobs:
       matrix:
         node: [24, 26]
     steps:
+      - name: Reuse verified CI
+        id: verified
+        uses: aimuzov/infra-ci/reuse-check@v1
+        continue-on-error: true
+        with:
+          workflow: .github/workflows/check.yml
+          matrix: ${{ toJSON(matrix) }}
       - uses: actions/checkout@v5
+        if: steps.verified.outputs.reused != 'true'
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+        if: steps.verified.outputs.reused != 'true'
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+        if: steps.verified.outputs.reused != 'true'
       - run: npm ci
+        if: steps.verified.outputs.reused != 'true'
       - run: python -m pip install maxapi-python==2.5.0 instagrapi==3.2.2
+        if: steps.verified.outputs.reused != 'true'
       - run: npm exec playwright install --with-deps chromium
+        if: steps.verified.outputs.reused != 'true'
       - run: npm run check
+        if: steps.verified.outputs.reused != 'true'
       - run: npm test
+        if: steps.verified.outputs.reused != 'true'
       - run: python -m unittest discover -s tests
         working-directory: python
+        if: steps.verified.outputs.reused != 'true'
       - run: npm run test:package
+        if: steps.verified.outputs.reused != 'true'
       - run: npm pack
+        if: steps.verified.outputs.reused != 'true'
+      - name: Record verified CI
+        if: github.event_name == 'pull_request' && steps.verified.outputs.reused != 'true'
+        uses: aimuzov/infra-ci/record-check@v1
+        continue-on-error: true
+        with:
+          workflow: .github/workflows/check.yml
+          matrix: ${{ toJSON(matrix) }}
