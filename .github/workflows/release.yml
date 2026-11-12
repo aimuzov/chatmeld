@@ -15,6 +15,8 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
+  id-token: write
 
 jobs:
   release:
@@ -33,8 +35,8 @@ jobs:
   publish:
     needs: [release, check]
     if: >-
-      !cancelled() && vars.NPM_PUBLISH == 'true' &&
-      (github.event_name == 'workflow_dispatch' || needs.check.result == 'success')
+      !cancelled() && vars.NPM_PUBLISH == 'true' && (github.event_name == 'workflow_dispatch' || needs.check.result ==
+      'success')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
