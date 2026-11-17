@@ -28,7 +28,7 @@
     "playwright": "1.64.1",
     "pngjs": "7.0.0",
     "qrcode": "1.5.4",
-    "teleproto": "1.232.1",
+    "teleproto": "1.233.0",
     "vk-io": "4.10.1"
   },
   "devDependencies": {
