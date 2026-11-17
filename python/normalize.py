@@ -11,8 +11,7 @@ def forwarded_message(message):
 
 
 def normalize_message(message, account_id: str, own_id: int, *, history_chat_id=None) -> dict | None:
-    forwarded = forwarded_message(message)
-    if history_chat_id is None and (message.chat_id is None or (message.sender == own_id and forwarded is None)):
+    if history_chat_id is None and message.chat_id is None:
         return None
     chat_id = str(message.chat_id if history_chat_id is None else history_chat_id)
     attachments = []

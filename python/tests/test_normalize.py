@@ -19,10 +19,22 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(result["text"], "Привет")
         self.assertEqual(result["direction"], "incoming")
 
-    def test_own_messages_and_messages_without_chat_are_not_forwarded(self):
+    def test_own_realtime_messages_match_history_identity_and_direction(self):
         message = Message.model_validate({
             "id": 1, "chatId": 42, "sender": 73,
             "text": "Привет", "time": 1700000000000, "type": "USER",
+        })
+        realtime = normalize_message(message, "personal", 73)
+        history = normalize_message(message, "personal", 73, history_chat_id=42)
+        self.assertEqual(realtime, history)
+        self.assertEqual(realtime["direction"], "outgoing")
+        self.assertEqual(realtime["messageId"], "42:1")
+        self.assertEqual(realtime["text"], "Привет")
+
+    def test_messages_without_chat_are_not_forwarded(self):
+        message = Message.model_validate({
+            "id": 1, "sender": 73, "text": "Привет",
+            "time": 1700000000000, "type": "USER",
         })
         self.assertIsNone(normalize_message(message, "personal", 73))
         message.chat_id = None
