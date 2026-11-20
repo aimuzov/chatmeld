@@ -32,6 +32,31 @@ function object(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 function failure(code: unknown): AdapterError {
+  if (code === "BAD_CREDENTIALS")
+    return new AdapterError(
+      "AUTH_REQUIRED",
+      "Instagram отклонил логин или пароль.",
+    );
+  if (code === "RATE_LIMITED")
+    return new AdapterError(
+      "PROVIDER_ERROR",
+      "Instagram ограничил частоту запросов. Попробуйте позже.",
+    );
+  if (code === "LOGIN_FAILED")
+    return new AdapterError(
+      "PROVIDER_ERROR",
+      "Не удалось выполнить вход в Instagram.",
+    );
+  if (code === "PROFILE_FAILED")
+    return new AdapterError(
+      "PROVIDER_ERROR",
+      "Не удалось получить профиль Instagram.",
+    );
+  if (code === "DIRECT_FAILED")
+    return new AdapterError(
+      "PROVIDER_ERROR",
+      "Не удалось загрузить переписку Instagram Direct.",
+    );
   if (code === "UNSUPPORTED_OPERATION")
     return new AdapterError(
       "UNSUPPORTED_OPERATION",
@@ -49,7 +74,7 @@ function failure(code: unknown): AdapterError {
     );
   return new AdapterError(
     "PROVIDER_ERROR",
-    "Не удалось выполнить операцию Instagram. Проверьте аккаунт в официальном приложении.",
+    "Не удалось выполнить операцию Instagram.",
   );
 }
 

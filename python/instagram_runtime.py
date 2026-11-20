@@ -15,6 +15,11 @@ from urllib.parse import urlsplit
 
 ERRORS = {
     'AUTH_REQUIRED': 'Instagram authorization required; complete verification manually if necessary',
+    'LOGIN_FAILED': 'Instagram login failed',
+    'PROFILE_FAILED': 'Instagram account lookup failed',
+    'DIRECT_FAILED': 'Instagram inbox lookup failed',
+    'BAD_CREDENTIALS': 'Instagram rejected the credentials',
+    'RATE_LIMITED': 'Instagram rate limit reached',
     'STORAGE_ERROR': 'Instagram session storage failed',
     'PROVIDER_ERROR': 'Instagram request failed',
     'UNSUPPORTED_OPERATION': 'Instagram operation is not supported',
@@ -55,14 +60,18 @@ class BridgeError(RuntimeError):
         super().__init__(ERRORS[self.code])
 
 
-def safe_error(error):
+def safe_error(error, fallback='PROVIDER_ERROR'):
     if isinstance(error, BridgeError):
         return error
     names = {cls.__name__ for cls in type(error).__mro__}
-    auth_errors = {'LoginRequired', 'ClientLoginRequired', 'BadPassword', 'BadCredentials',
+    if names & {'BadPassword', 'BadCredentials'}:
+        return BridgeError('BAD_CREDENTIALS')
+    if 'ClientThrottledError' in names or getattr(getattr(error, 'response', None), 'status_code', None) == 429:
+        return BridgeError('RATE_LIMITED')
+    auth_errors = {'LoginRequired', 'ClientLoginRequired',
                    'TwoFactorRequired', 'ChallengeError', 'ChallengeRequired',
                    'ChallengeUnknownStep', 'ChallengeSelfieCaptcha', 'SelectContactPointRecoveryForm'}
-    return BridgeError('AUTH_REQUIRED' if names & auth_errors else 'PROVIDER_ERROR')
+    return BridgeError('AUTH_REQUIRED' if names & auth_errors else fallback)
 
 
 def identifier(value):
@@ -256,7 +265,7 @@ class InstagramRuntime:
     def _persist(self):
         try:
             settings = self.client.get_settings()
-            # SDK 3.2.2 does not return credentials. Guard this boundary if that changes.
+            # Keep credentials out of storage even if the SDK adds them to settings.
             settings = {k: v for k, v in settings.items() if k not in {'password', 'verification_code'}}
             self._rpc({'event': 'session', 'settings': settings}, 45)
         except BaseException:
@@ -300,6 +309,7 @@ class InstagramRuntime:
         self.client = self.client_factory()
         self.client.challenge_code_handler = self._code
         self.client.change_password_handler = self._no_password_change
+        stage = 'LOGIN_FAILED'
         password = None
         code = None
         self.authenticating = method == 'login'
@@ -322,12 +332,14 @@ class InstagramRuntime:
                         if type(error).__name__ != 'TwoFactorRequired' or attempt == 3:
                             raise
                         code = self._code()
+            stage = 'PROFILE_FAILED'
             account = self.client.account_info()
             self.self_id = str(account.pk)
             if (str(account.username).casefold() != username.casefold()
                     or str(self.client.user_id) != self.self_id):
                 raise BridgeError('AUTH_REQUIRED')
             self.cutoff = datetime.now(timezone.utc)
+            stage = 'DIRECT_FAILED'
             threads = self.client.direct_threads(amount=20, thread_message_limit=20)
             for thread in threads:
                 for message in thread.messages:
@@ -336,6 +348,8 @@ class InstagramRuntime:
             self.connected = True
             self.interval = max(15, float(params.get('pollIntervalSeconds', 15)))
             return {'ok': True}
+        except Exception as error:
+            raise safe_error(error, stage) from None
         finally:
             self.authenticating = False
             self.client.password = None
