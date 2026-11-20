@@ -1,3 +1,4 @@
+import { savedSession } from "./fixtures/telegram-session.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EventEmitter } from "node:events";
@@ -148,7 +149,7 @@ test("Telegram sends all media kinds and downloads references resolved from orig
     return Buffer.from(bytes);
   });
   const c = context();
-  await writeStored(c.storage, "telegram/session", { session: "" });
+  await writeStored(c.storage, "telegram/session", { session: savedSession });
   const driver = createTelegramDriver({
     accountId: "a",
     apiId: 1,
@@ -579,7 +580,7 @@ test("Telegram stale media references leave the connected adapter usable", async
     },
   );
   const c = context();
-  await writeStored(c.storage, "telegram/session", { session: "" });
+  await writeStored(c.storage, "telegram/session", { session: savedSession });
   const driver = createTelegramDriver({
     accountId: "a",
     apiId: 1,

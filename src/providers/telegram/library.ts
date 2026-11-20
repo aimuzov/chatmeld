@@ -52,9 +52,19 @@ class TelegramDriver implements ProviderDriver {
     private options: { accountId: string; apiId: number; apiHash: string },
   ) {}
 
-  private queueSession(): void {
+  private queueSession(required = false): void {
     if (!this.session || !this.context || this.failure) return;
-    const value = { session: StringSession.prototype.save.call(this.session) };
+    const session = StringSession.prototype.save.call(this.session);
+    // During a DC switch Teleproto may save before the new auth key is ready.
+    if (!session) {
+      if (required)
+        throw new AdapterError(
+          "STORAGE_ERROR",
+          "Telegram не предоставил ключ для сохранения сессии.",
+        );
+      return;
+    }
+    const value = { session };
     this.writes = this.writes.then(() =>
       writeStored(this.context!.storage, "telegram/session", value),
     );
@@ -74,18 +84,30 @@ class TelegramDriver implements ProviderDriver {
     this.context = context;
     this.failure = undefined;
     this.writes = Promise.resolve();
-    const stored = await readStored<{ session: string }>(
-      context.storage,
-      "telegram/session",
-    );
-    if (!authorize && !stored)
-      throw new AdapterError(
-        "AUTH_REQUIRED",
-        "Нет сохранённой сессии Telegram.",
+    if (authorize) {
+      this.session = new StringSession("");
+    } else {
+      const stored = await readStored<{ session: string }>(
+        context.storage,
+        "telegram/session",
       );
-    if (stored && typeof stored.session !== "string")
-      throw new Error("Некорректная сессия Telegram.");
-    this.session = new StringSession(stored?.session ?? "");
+      if (!stored?.session)
+        throw new AdapterError(
+          "AUTH_REQUIRED",
+          "Нет сохранённой сессии Telegram. Войдите по QR-коду.",
+        );
+      try {
+        if (typeof stored.session !== "string") throw new TypeError();
+        this.session = new StringSession(stored.session);
+        await this.session.load();
+        if (this.session.authKey?.getKey()?.length !== 256) throw new Error();
+      } catch {
+        throw new AdapterError(
+          "AUTH_REQUIRED",
+          "Сохранённая сессия Telegram повреждена. Войдите по QR-коду.",
+        );
+      }
+    }
     const proxy = process.env.CHATMELD_TELEGRAM_SOCKS;
     const route = proxy ? URL.parse(proxy) : undefined;
     if (
@@ -125,7 +147,16 @@ class TelegramDriver implements ProviderDriver {
     context.signal.addEventListener("abort", abort, { once: true });
     this.removeAbort = () => context.signal.removeEventListener("abort", abort);
     try {
-      await client.connect();
+      try {
+        await client.connect();
+      } catch (error) {
+        context.signal.throwIfAborted();
+        if (error instanceof AdapterError) throw error;
+        throw new AdapterError(
+          "PROVIDER_ERROR",
+          "Не удалось установить соединение с Telegram.",
+        );
+      }
       context.signal.throwIfAborted();
       if (authorize && !(await client.checkAuthorization())) {
         if (!context.auth)
@@ -156,14 +187,17 @@ class TelegramDriver implements ProviderDriver {
           "Сессия Telegram не авторизована.",
         );
       if ((await client.getMe()).bot)
-        throw new Error("Требуется личный аккаунт Telegram.");
+        throw new AdapterError(
+          "AUTH_REQUIRED",
+          "Требуется личный аккаунт Telegram.",
+        );
       context.signal.throwIfAborted();
       this.session.save = () => {
         const value = StringSession.prototype.save.call(this.session!);
         this.queueSession();
         return value;
       };
-      this.queueSession();
+      this.queueSession(true);
       await this.writes;
       this.subscribe();
     } catch (error) {

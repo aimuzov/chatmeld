@@ -20,6 +20,7 @@ function harness(
   let ended = false;
   const socket = {
     ev: events,
+    async resyncAppState() {},
     fetchMessageHistory: (count: number, key: unknown, timestamp: number) =>
       history!(events, count, key, timestamp),
     end() {
@@ -51,7 +52,7 @@ function harness(
       errors.push(error);
     },
   };
-  return { events, runtime, context, errors, ended: () => ended };
+  return { events, runtime, context, errors, socket, ended: () => ended };
 }
 
 test("WhatsApp authorization waits for durable credential acknowledgement", async () => {
@@ -116,6 +117,34 @@ test("WhatsApp revoked session requires a new authorization without exposing dis
   await rejected;
   assert.equal(app.ended(), true);
   assert.equal((app.errors[0] as AdapterError).code, "AUTH_REQUIRED");
+  await app.runtime.close();
+});
+
+test("WhatsApp stays connected if contact sync fails and reports a socket close separately", async (t) => {
+  const app = harness(async () => {});
+  const sync = t.mock.method(app.socket, "resyncAppState", async () => {
+    throw new Error("private sync failure");
+  });
+  const opening = app.runtime.open(app.context, true);
+  await new Promise((resolve) => setImmediate(resolve));
+  app.events.emit("creds.update", { myAppStateKeyId: "key-id" });
+  app.events.emit("connection.update", { connection: "open" });
+  await opening;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(sync.mock.callCount(), 1);
+  assert.deepEqual(app.runtime.listChats(), []);
+  assert.equal(app.errors.length, 0);
+
+  app.events.emit("connection.update", {
+    connection: "close",
+    lastDisconnect: {
+      error: { output: { statusCode: DisconnectReason.connectionLost } },
+    },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((app.errors[0] as AdapterError).code, "DISCONNECTED");
+  assert.match(app.errors[0]!.message, /408/);
+  assert.equal(app.ended(), true);
   await app.runtime.close();
 });
 

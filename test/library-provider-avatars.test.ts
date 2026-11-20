@@ -1,3 +1,4 @@
+import { savedSession } from "./fixtures/telegram-session.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mkdtemp, writeFile, chmod, rm } from "node:fs/promises";
@@ -62,7 +63,7 @@ test("Telegram avatar warms restored entities, requests small photo and treats e
     },
   );
   const c = context();
-  await writeStored(c.storage, "telegram/session", { session: "" });
+  await writeStored(c.storage, "telegram/session", { session: savedSession });
   const driver = createTelegramDriver({
     accountId: "one",
     apiId: 1,

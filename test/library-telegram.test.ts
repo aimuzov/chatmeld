@@ -9,6 +9,8 @@ import { readStored, writeStored } from "../src/library/storage.js";
 import { createTelegramDriver } from "../src/providers/telegram/library.js";
 import type { DriverContext, SessionStorage } from "../src/library/types.js";
 
+import { savedSession } from "./fixtures/telegram-session.js";
+
 function fixture() {
   const entries = new Map<string, Uint8Array>();
   const storage: SessionStorage = {
@@ -43,11 +45,15 @@ test("Telegram restore refuses missing session without connecting or requesting 
   });
   const f = fixture();
   await assert.rejects(f.driver.connect(f.context), /сесси/i);
+  await writeStored(f.storage, "telegram/session", { session: "" });
+  await assert.rejects(f.driver.connect(f.context), /Войдите по QR-коду/);
   assert.equal(connects, 0);
 });
 
 test("Telegram QR authorization forwards QR and 2FA then persists before success", async (t) => {
   const f = fixture();
+  await writeStored(f.storage, "telegram/session", { session: "damaged" });
+  t.mock.method(StringSession.prototype, "save", () => savedSession);
   let authorized = false;
   let destroyed = 0;
   t.mock.method(TelegramClient.prototype, "connect", async () => true);
@@ -90,13 +96,16 @@ test("Telegram QR authorization forwards QR and 2FA then persists before success
   };
   await f.driver.authorize(f.context);
   assert.equal(qrs[0], "tg://login?token=dG9rZW4");
-  assert.ok(f.entries.has("telegram/session"));
+  assert.deepEqual(await readStored(f.storage, "telegram/session"), {
+    session: savedSession,
+  });
   await f.driver.disconnect();
   assert.equal(destroyed, 1);
 });
 
 test("Telegram failed session persistence closes the client and fails authorization", async (t) => {
   const f = fixture();
+  t.mock.method(StringSession.prototype, "save", () => savedSession);
   let destroyed = false;
   t.mock.method(TelegramClient.prototype, "connect", async () => true);
   t.mock.method(
@@ -126,7 +135,7 @@ test("Telegram failed session persistence closes the client and fails authorizat
 
 test("Telegram restores saved session and persists SDK session changes before disconnect resolves", async (t) => {
   const f = fixture();
-  await writeStored(f.storage, "telegram/session", { session: "" });
+  await writeStored(f.storage, "telegram/session", { session: savedSession });
   let client: TelegramClient | undefined;
   let serialized = "first";
   t.mock.method(
@@ -154,6 +163,8 @@ test("Telegram restores saved session and persists SDK session changes before di
   serialized = "updated";
   assert.ok(client);
   client.session.save();
+  serialized = "";
+  client.session.save();
   await f.driver.disconnect();
   assert.deepEqual(await readStored(f.storage, "telegram/session"), {
     session: "updated",
@@ -162,6 +173,7 @@ test("Telegram restores saved session and persists SDK session changes before di
 
 test("Telegram cancellation rejects a pending 2FA challenge and closes its client", async (t) => {
   const f = fixture();
+  await writeStored(f.storage, "telegram/session", { session: savedSession });
   const control = new AbortController();
   f.context.signal = control.signal;
   let destroyed = false;
@@ -196,12 +208,14 @@ test("Telegram cancellation rejects a pending 2FA challenge and closes its clien
   control.abort();
   await assert.rejects(authorizing, /отменена/);
   assert.equal(destroyed, true);
-  assert.equal(f.entries.size, 0);
+  assert.deepEqual(await readStored(f.storage, "telegram/session"), {
+    session: savedSession,
+  });
 });
 
 test("Telegram history restores a private channel entity before requesting messages", async (t) => {
   const f = fixture();
-  await writeStored(f.storage, "telegram/session", { session: "" });
+  await writeStored(f.storage, "telegram/session", { session: savedSession });
   const channel = new Api.Channel({
     id: bigInt(42),
     accessHash: bigInt(98765),
@@ -285,7 +299,7 @@ test("Telegram history restores a private channel entity before requesting messa
 
 test("Telegram publishes read watermarks for private outbox updates", async (t) => {
   const f = fixture();
-  await writeStored(f.storage, "telegram/session", { session: "" });
+  await writeStored(f.storage, "telegram/session", { session: savedSession });
   t.mock.method(TelegramClient.prototype, "connect", async () => true);
   t.mock.method(
     TelegramClient.prototype,
