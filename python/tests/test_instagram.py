@@ -122,8 +122,10 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_direct_access_required(self):
         self.client.direct_error = True
-        with self.assertRaises(BridgeError):
+        with self.assertRaises(BridgeError) as error:
             await self.connect()
+        self.assertEqual(error.exception.code, 'DIRECT_FAILED')
+        self.assertNotIn('secret', str(error.exception))
         self.assertFalse(any((r['event'] == 'session' for r in self.requests)))
 
     async def test_login_2fa_challenge_password_cleared(self):
