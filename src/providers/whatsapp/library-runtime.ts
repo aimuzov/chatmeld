@@ -75,7 +75,13 @@ export class WhatsAppLibraryRuntime {
       await new Promise<void>((resolve, reject) => {
         this.rejectOpen = reject;
         const timer = setTimeout(
-          () => this.fail(new Error("Истекло время подключения WhatsApp.")),
+          () =>
+            this.fail(
+              new AdapterError(
+                "PROVIDER_ERROR",
+                "Истекло время подключения WhatsApp.",
+              ),
+            ),
           authorize ? 120_000 : 30_000,
         );
         const success = () => {
@@ -90,7 +96,12 @@ export class WhatsAppLibraryRuntime {
         try {
           this.openSocket(context, authorize, success, 0);
         } catch {
-          this.fail(new Error("Не удалось подключить WhatsApp."));
+          this.fail(
+            new AdapterError(
+              "PROVIDER_ERROR",
+              "Не удалось подключить WhatsApp.",
+            ),
+          );
         }
       });
     } finally {
@@ -138,15 +149,14 @@ export class WhatsAppLibraryRuntime {
           await this.auth!.saveCreds();
           await this.credentials;
           await this.auth!.flush();
-          if (this.stopped || this.fault) return;
+          if (this.socket !== socket || this.stopped || this.fault) return;
           this.connected = true;
           opened();
           if (this.auth!.state.creds.myAppStateKeyId)
             void socket
               .resyncAppState(["critical_unblock_low"], true)
-              .catch(() =>
-                this.fail(new Error("Ошибка синхронизации WhatsApp.")),
-              );
+              // Socket and storage failures are handled by their own callbacks.
+              .catch(() => {});
         }
         if (update.connection === "close") {
           this.connected = false;
@@ -164,7 +174,14 @@ export class WhatsAppLibraryRuntime {
               "AUTH_REQUIRED",
               "Сессия WhatsApp отозвана.",
             );
-          } else throw new Error("Соединение WhatsApp закрыто.");
+          } else {
+            throw new AdapterError(
+              "DISCONNECTED",
+              Number.isInteger(status)
+                ? `Соединение WhatsApp закрыто (код ${status}).`
+                : "Соединение WhatsApp закрыто.",
+            );
+          }
         }
       })().catch((error: unknown) =>
         this.fail(
