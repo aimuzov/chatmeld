@@ -28,7 +28,7 @@ jobs:
         with:
           workflow: .github/workflows/check.yml
           matrix: ${{ toJSON(matrix) }}
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: steps.verified.outputs.reused != 'true'
       - uses: actions/setup-node@v5
         with:
