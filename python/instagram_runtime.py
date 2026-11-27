@@ -176,6 +176,7 @@ class InstagramRuntime:
         self.account_id = ''
         self.self_id = ''
         self.suggested_bot_ids = None
+        self.first_page = None
         self.connected = False
         self.stopped = False
         self.seen = OrderedDict()
@@ -297,6 +298,13 @@ class InstagramRuntime:
         return {str(user.pk): user for user in [*(getattr(thread, 'users', None) or []),
                                                 *(getattr(thread, 'left_users', None) or [])]}
 
+    def _diagnose(self, stage, error):
+        status = getattr(getattr(error, 'response', None), 'status_code', None)
+        # Exception text and response bodies may contain credentials or Direct messages.
+        reason = error.code if isinstance(error, BridgeError) else type(error).__name__
+        self.emit({'event': 'diagnostic', 'stage': stage, 'reason': reason,
+                   'status': status if type(status) is int and 100 <= status <= 599 else None})
+
     def _initialize(self, method, params):
         if method == 'connect' and not isinstance(params.get('settings'), dict):
             raise BridgeError('AUTH_REQUIRED')
@@ -340,7 +348,8 @@ class InstagramRuntime:
                 raise BridgeError('AUTH_REQUIRED')
             self.cutoff = datetime.now(timezone.utc)
             stage = 'DIRECT_FAILED'
-            threads = self.client.direct_threads(amount=20, thread_message_limit=20)
+            self.first_page = self.client.direct_threads_chunk(thread_message_limit=20)
+            threads, _ = self.first_page
             for thread in threads:
                 for message in thread.messages:
                     self._remember(f'{identifier(thread)}:{identifier(message)}')
@@ -349,6 +358,7 @@ class InstagramRuntime:
             self.interval = max(15, float(params.get('pollIntervalSeconds', 15)))
             return {'ok': True}
         except Exception as error:
+            self._diagnose(stage, error)
             raise safe_error(error, stage) from None
         finally:
             self.authenticating = False
@@ -363,8 +373,15 @@ class InstagramRuntime:
             return self._initialize(method, params)
         if not self.connected:
             raise BridgeError('AUTH_REQUIRED')
-        if method == 'chats':
-            threads = self.client.direct_threads(amount=0, thread_message_limit=1)
+        if method in {'chats', 'chatsPage'}:
+            cursor = params.get('cursor')
+            if method == 'chats':
+                threads = self.client.direct_threads(amount=0, thread_message_limit=1)
+            elif cursor is None and self.first_page is not None:
+                threads, cursor = self.first_page
+            else:
+                threads, cursor = self.client.direct_threads_chunk(thread_message_limit=1, cursor=cursor)
+            self.first_page = None
             if threads and self.suggested_bot_ids is None:
                 try:
                     self.suggested_bot_ids = {str(user.pk) for user in self.client.direct_search_gen_ai_bots()}
@@ -384,6 +401,8 @@ class InstagramRuntime:
                 result.append({"id": identifier(thread), "title": title or identifier(thread),
                                **({"isBot": True} if bot else {}),
                                **({"profileUrl": f"https://www.instagram.com/{username}/"} if username else {})})
+            if method == 'chatsPage':
+                result = {'chats': result, 'nextCursor': cursor or None}
         elif method == 'historyPage':
             from instagrapi.extractors import extract_direct_thread
             chat_id = str(int(params['chatId']))
@@ -438,6 +457,8 @@ class InstagramRuntime:
             try:
                 result = await self.loop.run_in_executor(self.executor, self._command, method, params)
             except Exception as error:
+                if method not in {"login", "connect"}:
+                    self._diagnose(method, error)
                 raise safe_error(error) from None
             if method in {'login', 'connect'}:
                 self.poller = asyncio.create_task(self._poll_loop())
@@ -468,6 +489,7 @@ class InstagramRuntime:
             try:
                 messages = await self.loop.run_in_executor(self.executor, self._poll)
             except Exception as error:
+                self._diagnose("poll", error)
                 raise safe_error(error) from None
             for message in messages:
                 self.emit({'event': 'message', 'message': message})

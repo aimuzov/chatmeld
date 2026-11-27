@@ -16,6 +16,7 @@ const pending = new Map<
 const requestStorage = (method: string, params: unknown): Promise<unknown> =>
   new Promise((resolve, reject) => {
     if (pending.size >= 256) {
+      port.postMessage({ event: "storage_failure", method: "queue_full" });
       reject(new Error("Переполнена очередь хранилища WhatsApp."));
       return;
     }
@@ -93,6 +94,8 @@ port.on(
                 }),
             },
             request.method === "authorize",
+            (stage) =>
+              port.postMessage({ event: "storage_failure", method: stage }),
           );
         } else if (request.method === "chats") result = runtime!.listChats();
         else if (request.method === "historyPage")

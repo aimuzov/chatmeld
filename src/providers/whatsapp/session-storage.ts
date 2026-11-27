@@ -27,24 +27,30 @@ const storageError = () =>
 
 export async function createWhatsAppAuthState(
   storage: SessionStorage,
-  onFailure: (error: Error) => void = () => {},
+  onFailure: (error: Error, stage: string) => void = () => {},
 ) {
   let pending = Promise.resolve();
   let fault: Error | undefined;
-  const fail = () => {
+  const fail = (stage: string) => {
     if (!fault) {
       fault = storageError();
-      onFailure(fault);
+      onFailure(fault, stage);
     }
     return fault;
   };
   const read = async (key: string) => {
     if (fault) throw fault;
+    let bytes: Uint8Array | undefined;
+
     try {
-      const bytes = await storage.read(key);
+      bytes = await storage.read(key);
+    } catch {
+      throw fail("read");
+    }
+    try {
       return bytes === undefined ? undefined : decode(bytes);
     } catch {
-      throw fail();
+      throw fail("decode");
     }
   };
   const saved = (await read(credentialsKey)) as AuthenticationCreds | undefined;
@@ -55,7 +61,7 @@ export async function createWhatsAppAuthState(
       !saved.signedPreKey?.keyPair?.private ||
       typeof saved.registrationId !== "number")
   )
-    throw fail();
+    throw fail("validate_credentials");
   const creds = saved ?? initAuthCreds();
   const write = (changes: readonly SessionChange[]) => {
     const task = pending.then(async () => {
@@ -63,7 +69,7 @@ export async function createWhatsAppAuthState(
       try {
         await storage.writeBatch(changes);
       } catch {
-        throw fail();
+        throw fail("write_batch");
       }
     });
     pending = task;

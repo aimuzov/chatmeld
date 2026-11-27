@@ -56,10 +56,18 @@ export class WhatsAppLibraryRuntime {
     this.context?.onError(error);
   }
 
-  async open(context: DriverContext, authorize: boolean): Promise<void> {
+  async open(
+    context: DriverContext,
+    authorize: boolean,
+    storageFailure?: (stage: string) => void,
+  ): Promise<void> {
     this.context = context;
-    this.auth = await createWhatsAppAuthState(context.storage, (error) =>
-      this.fail(error),
+    this.auth = await createWhatsAppAuthState(
+      context.storage,
+      (error, stage) => {
+        storageFailure?.(stage);
+        this.fail(error);
+      },
     );
     if (!authorize && !hasSession(this.auth.state.creds))
       throw new AdapterError(

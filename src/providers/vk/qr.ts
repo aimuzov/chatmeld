@@ -6,6 +6,7 @@ import {
   type Frame,
 } from "playwright";
 import { setTimeout as delay } from "node:timers/promises";
+import { AdapterError } from "../../library/errors.js";
 import { decodeVkQr, tokenFromVkRequest } from "./qr-helpers.js";
 
 type BrowserSession = { browser: Browser; context: BrowserContext };
@@ -260,6 +261,20 @@ export async function loginWithVkQr(options: {
           throw error;
         }
       }
+      if (
+        !lastQr &&
+        isVkHost(new URL(page.url()).hostname) &&
+        (await page.title()).trim() === "Проверяем, что вы не робот" &&
+        (await page
+          .getByText("Продолжить", { exact: true })
+          .first()
+          .isVisible())
+      )
+        throw new AdapterError(
+          "AUTH_REQUIRED",
+          "ВК запросил проверку «Я не робот» на сервере. Получить QR-код для входа сейчас невозможно.",
+        );
+
       const qr = await qrOnPage(page);
       if (qr && qr !== lastQr) {
         lastQr = qr;
@@ -274,6 +289,7 @@ export async function loginWithVkQr(options: {
     );
   } catch (error) {
     if (options.signal.aborted) throw new Error("QR-вход VK отменён.");
+    if (error instanceof AdapterError) throw error;
     if (
       error instanceof Error &&
       (error.message.startsWith("Время QR-входа") ||
@@ -293,6 +309,7 @@ export async function loginWithVkQr(options: {
 export async function restoreVkSession(options: {
   state: VkBrowserState;
   previousToken: string;
+  onFailure?: (reason: "left_vk" | "timeout") => void;
   validate: (token: string, signal: AbortSignal) => Promise<boolean>;
   signal: AbortSignal;
   launch?: (state: VkBrowserState) => Promise<BrowserSession>;
@@ -328,7 +345,10 @@ export async function restoreVkSession(options: {
     });
     while (!signal.aborted) {
       const location = new URL(page.url());
-      if (!isVkHost(location.hostname)) return;
+      if (!isVkHost(location.hostname)) {
+        options.onFailure?.("left_vk");
+        return;
+      }
       for (const token of candidates) {
         signal.throwIfAborted();
         candidates.delete(token);
@@ -347,4 +367,5 @@ export async function restoreVkSession(options: {
     signal.removeEventListener("abort", abort);
     await browser.close().catch(() => undefined);
   }
+  options.onFailure?.("timeout");
 }
