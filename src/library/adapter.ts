@@ -320,6 +320,16 @@ export class Adapter implements MessagingAdapter {
   listChats() {
     return this.perform((driver) => driver.listChats());
   }
+  listChatsPage(cursor?: string) {
+    return this.perform((driver) => {
+      if (!driver.listChatsPage)
+        throw new AdapterError(
+          "UNSUPPORTED_OPERATION",
+          "Провайдер не поддерживает загрузку диалогов страницами.",
+        );
+      return driver.listChatsPage(cursor);
+    }, false);
+  }
   sendMedia(chatId: string, media: MediaInput) {
     try {
       if (typeof chatId !== "string" || !chatId.trim())

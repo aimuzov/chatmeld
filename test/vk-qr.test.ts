@@ -101,6 +101,26 @@ test(
   },
 );
 
+test("VK human verification is reported before the QR deadline", async () => {
+  const fixture = await browserFixture(false);
+  await fixture.context.route("https://vk.ru/im", (route) =>
+    route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: "<title>Проверяем, что вы не робот</title><button>Продолжить</button>",
+    }),
+  );
+  await assert.rejects(
+    loginWithVkQr({
+      launch: async () => fixture,
+      signal: new AbortController().signal,
+      timeout: 5000,
+      onQr: async () => assert.fail("Unexpected QR"),
+    }),
+    { code: "AUTH_REQUIRED", message: /Я не робот/ },
+  );
+  assert.equal(fixture.browser.isConnected(), false);
+});
+
 test(
   "VK QR cancellation closes the browser while waiting for phone confirmation",
   { timeout: 15000 },

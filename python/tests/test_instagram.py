@@ -61,6 +61,9 @@ class FakeClient:
             raise RuntimeError('secret')
         return self.threads
 
+    def direct_threads_chunk(self, **kwargs):
+        return self.direct_threads(**kwargs), None
+
     def direct_thread(self, chat_id, amount):
         self.calls.append(('history', chat_id, amount))
         return self.threads[0]
@@ -151,6 +154,22 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(BridgeError):
             self.client.change_password_handler('me')
 
+    async def test_chat_pages_reuse_snapshot_and_pass_cursor_without_full_scan(self):
+        from unittest.mock import Mock
+        fetch = self.client.direct_threads_chunk = Mock(side_effect=[
+            (self.client.threads, 'older'), RuntimeError('temporary'), ([], None)])
+        await self.connect()
+        first = await self.runtime.command('chatsPage', {})
+        self.assertEqual(first['nextCursor'], 'older')
+        self.assertEqual(first['chats'][0]['id'], CHAT)
+        fetch.assert_called_once_with(thread_message_limit=20)
+        with self.assertRaises(BridgeError):
+            await self.runtime.command('chatsPage', {'cursor': 'older'})
+        last = await self.runtime.command('chatsPage', {'cursor': 'older'})
+        self.assertEqual(last, {'chats': [], 'nextCursor': None})
+        fetch.assert_called_with(thread_message_limit=1, cursor='older')
+        self.assertTrue(self.runtime.connected)
+
     async def test_chats_history_send(self):
         await self.connect()
         self.assertEqual(await self.runtime.command('chats', {}), [{
@@ -175,6 +194,14 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.events[0]['message']['attachments'], [{'kind': 'media', 'referencePayload': {'chatId': CHAT, 'messageId': 'media', 'index': 0}}])
         self.assertLessEqual(len(self.runtime.seen), 2000)
 
+    async def test_poll_error_logs_stage_and_class_without_raw_exception(self):
+        await self.connect()
+        self.client.direct_error = True
+        with self.assertRaises(BridgeError):
+            await self.runtime.poll_once()
+        self.assertEqual(self.events, [{'event': 'diagnostic', 'stage': 'poll',
+                                        'reason': 'RuntimeError', 'status': None}])
+
     async def test_storage_failure_stops_before_emit(self):
         await self.connect()
         self.fail_storage = True
@@ -182,7 +209,8 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(BridgeError) as e:
             await self.runtime.poll_once()
         self.assertEqual(e.exception.code, 'STORAGE_ERROR')
-        self.assertEqual(self.events, [])
+        self.assertEqual(self.events, [{'event': 'diagnostic', 'stage': 'poll',
+                                        'reason': 'STORAGE_ERROR', 'status': None}])
         with self.assertRaises(BridgeError):
             await self.runtime.command('chats', {})
 

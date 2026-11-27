@@ -1,3 +1,4 @@
+import { providerFailure } from "../../library/diagnostics.js";
 import {
   API,
   APIError,
@@ -173,6 +174,13 @@ class VkDriver implements ProviderDriver {
           ? async (previousToken) => {
               const restored = await this.restore({
                 state: browser!,
+                onFailure: (reason) =>
+                  providerFailure(
+                    "vk",
+                    this.accountId,
+                    "restore_browser",
+                    reason,
+                  ),
                 previousToken,
                 signal,
                 validate: async (token, validationSignal) => {
@@ -182,8 +190,15 @@ class VkDriver implements ProviderDriver {
                   );
                   try {
                     const users = await candidate.users.get({});
-                    if (users.length !== 1 || users[0]?.id !== userId)
+                    if (users.length !== 1 || users[0]?.id !== userId) {
+                      providerFailure(
+                        "vk",
+                        this.accountId,
+                        "validate_token",
+                        "user_mismatch",
+                      );
                       return false;
+                    }
                     await candidate.messages.getConversations({ count: 1 });
                     return true;
                   } catch (error) {
@@ -191,8 +206,16 @@ class VkDriver implements ProviderDriver {
                       [5, 7, 15].includes(
                         (error as { code?: number })?.code ?? 0,
                       )
-                    )
+                    ) {
+                      providerFailure(
+                        "vk",
+                        this.accountId,
+                        "validate_token",
+                        "api_rejected",
+                        (error as { code: number }).code,
+                      );
                       return false;
+                    }
                     throw error;
                   }
                 },

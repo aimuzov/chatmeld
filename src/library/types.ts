@@ -79,6 +79,9 @@ export interface ProviderDriver {
   connect(context: DriverContext): Promise<void>;
   authorize(context: DriverContext): Promise<void>;
   listChats(): Promise<Chat[]>;
+  listChatsPage?(
+    cursor?: string,
+  ): Promise<{ chats: Chat[]; nextCursor?: string | null }>;
   getAvatar?(target: AvatarTarget): Promise<Avatar | undefined>;
   sendMedia?(chatId: string, media: MediaInput): Promise<MediaSendResult>;
   downloadMedia?(reference: string): Promise<MediaFile>;
@@ -125,6 +128,9 @@ export interface MessagingAdapter {
   }): Promise<void>;
   respondToChallenge(response: { challengeId: string; value: string }): void;
   listChats(): Promise<Chat[]>;
+  listChatsPage?(
+    cursor?: string,
+  ): Promise<{ chats: Chat[]; nextCursor?: string | null }>;
   getAvatar(target: AvatarTarget): Promise<Avatar | undefined>;
   sendMedia(chatId: string, media: MediaInput): Promise<MediaSendResult>;
   downloadMedia(reference: string): Promise<MediaFile>;

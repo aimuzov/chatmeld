@@ -1,3 +1,4 @@
+import { providerFailure } from "../../library/diagnostics.js";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { AdapterError, cancelled } from "../../library/errors.js";
@@ -139,8 +140,17 @@ class InstagramDriver implements ProviderDriver {
     this.child = child;
     child.stderr.resume();
     this.exited = new Promise((resolve) =>
-      child.once("close", () => {
-        if (!this.stopping) this.fail(failure(undefined), child);
+      child.once("close", (code) => {
+        if (!this.stopping && !this.fault && this.child === child) {
+          providerFailure(
+            "instagram",
+            this.options.accountId,
+            "bridge",
+            "process_exit",
+            code ?? undefined,
+          );
+          this.fail(failure(undefined), child);
+        }
         resolve();
       }),
     );
@@ -152,6 +162,12 @@ class InstagramDriver implements ProviderDriver {
       if (this.child !== child || this.stopping || this.fault) return;
       buffer += chunk;
       if (buffer.length > 1_048_576) {
+        providerFailure(
+          "instagram",
+          this.options.accountId,
+          "bridge",
+          "output_limit",
+        );
         this.fail(failure(undefined), child);
         return;
       }
@@ -189,6 +205,35 @@ class InstagramDriver implements ProviderDriver {
     child: ChildProcessWithoutNullStreams,
   ): void {
     if (this.fault || this.stopping || this.child !== child) return;
+    if (value.event === "diagnostic") {
+      if (
+        typeof value.stage === "string" &&
+        [
+          "LOGIN_FAILED",
+          "PROFILE_FAILED",
+          "DIRECT_FAILED",
+          "poll",
+          "chats",
+          "chatsPage",
+          "historyPage",
+          "history",
+          "send",
+          "sendMedia",
+          "downloadMedia",
+          "avatar",
+        ].includes(value.stage) &&
+        typeof value.reason === "string" &&
+        /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(value.reason)
+      )
+        providerFailure(
+          "instagram",
+          this.options.accountId,
+          value.stage,
+          value.reason,
+          typeof value.status === "number" ? value.status : undefined,
+        );
+      return;
+    }
     if (typeof value.id === "number") {
       const pending = this.pending.get(value.id);
       if (!pending) return;
@@ -292,7 +337,18 @@ class InstagramDriver implements ProviderDriver {
       );
     const id = ++this.nextId;
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => this.fail(failure(undefined)), timeout);
+      const timer = setTimeout(() => {
+        providerFailure(
+          "instagram",
+          this.options.accountId,
+          method,
+          "request_timeout",
+        );
+        if (method === "chatsPage") {
+          this.pending.delete(id);
+          reject(failure(undefined));
+        } else this.fail(failure(undefined));
+      }, timeout);
       this.pending.set(id, {
         resolve: (value) => resolve(value as T),
         reject,
@@ -321,6 +377,11 @@ class InstagramDriver implements ProviderDriver {
   }
   listChats(): Promise<Chat[]> {
     return this.request("chats");
+  }
+  listChatsPage(
+    cursor?: string,
+  ): Promise<{ chats: Chat[]; nextCursor?: string | null }> {
+    return this.request("chatsPage", { cursor });
   }
   private mapMessage(value: unknown): Message {
     if (

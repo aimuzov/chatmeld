@@ -1,3 +1,4 @@
+import { providerFailure } from "../../library/diagnostics.js";
 import { Worker } from "node:worker_threads";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
@@ -114,6 +115,25 @@ export function createWhatsAppDriver(options: {
         fail(new Error("Рабочий процесс WhatsApp завершился."));
     });
     worker.on("message", (reply: Reply) => {
+      if (reply.event === "storage_failure") {
+        if (
+          reply.method &&
+          [
+            "read",
+            "decode",
+            "validate_credentials",
+            "write_batch",
+            "queue_full",
+          ].includes(reply.method)
+        )
+          providerFailure(
+            "whatsapp",
+            options.accountId,
+            reply.method,
+            "session_storage",
+          );
+        return;
+      }
       if (reply.storage) {
         const active = worker;
         storageQueue = storageQueue.then(async () => {
@@ -123,7 +143,15 @@ export function createWhatsAppDriver(options: {
                 ? await context!.storage.read(reply.params!.key)
                 : await context!.storage.writeBatch(reply.params!.changes);
             active?.postMessage({ storage: true, id: reply.id, result });
-          } catch {
+          } catch (error) {
+            const sqliteCode = (error as { errcode?: unknown } | null)?.errcode;
+            providerFailure(
+              "whatsapp",
+              options.accountId,
+              reply.method === "read" ? "read" : "write_batch",
+              "storage_backend",
+              typeof sqliteCode === "number" ? sqliteCode : undefined,
+            );
             active?.postMessage({
               storage: true,
               id: reply.id,
