@@ -220,11 +220,6 @@ class VkDriver implements ProviderDriver {
                   }
                 },
               });
-              if (!restored)
-                throw new AdapterError(
-                  "AUTH_REQUIRED",
-                  "Веб-сессия VK истекла. Повторите вход по QR.",
-                );
               signal.throwIfAborted();
               await writeStored(context.storage, key, {
                 token: restored.token,

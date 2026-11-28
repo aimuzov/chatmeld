@@ -398,3 +398,46 @@ test(
     assert.equal(browser?.isConnected(), false);
   },
 );
+
+test("VK restore timeout keeps the saved session eligible for retry", async () => {
+  const fixture = await browserFixture(false);
+  const reasons: string[] = [];
+
+  await fixture.context.route("https://vk.ru/im", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<title>Loading</title>" }),
+  );
+  await assert.rejects(
+    restoreVkSession({
+      state: { cookies: [], origins: [] },
+      previousToken: "old",
+      validate: async () => false,
+      signal: new AbortController().signal,
+      timeout: 800,
+      launch: async () => fixture,
+      onFailure: (reason) => reasons.push(reason),
+    }),
+    { code: "PROVIDER_ERROR" },
+  );
+  assert.deepEqual(reasons, ["timeout"]);
+  assert.equal(fixture.browser.isConnected(), false);
+});
+
+test("VK restore requests authorization when the login page offers a valid QR", async () => {
+  const fixture = await browserFixture(false);
+  const reasons: string[] = [];
+
+  await assert.rejects(
+    restoreVkSession({
+      state: { cookies: [], origins: [] },
+      previousToken: "old",
+      validate: async () => false,
+      signal: new AbortController().signal,
+      timeout: 5000,
+      launch: async () => fixture,
+      onFailure: (reason) => reasons.push(reason),
+    }),
+    { code: "AUTH_REQUIRED" },
+  );
+  assert.deepEqual(reasons, ["login_qr"]);
+  assert.equal(fixture.browser.isConnected(), false);
+});
