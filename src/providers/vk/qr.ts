@@ -1,5 +1,6 @@
 import {
   chromium,
+  errors,
   type Browser,
   type BrowserContext,
   type Page,
@@ -309,12 +310,12 @@ export async function loginWithVkQr(options: {
 export async function restoreVkSession(options: {
   state: VkBrowserState;
   previousToken: string;
-  onFailure?: (reason: "left_vk" | "timeout") => void;
+  onFailure?: (reason: "left_vk" | "timeout" | "login_qr") => void;
   validate: (token: string, signal: AbortSignal) => Promise<boolean>;
   signal: AbortSignal;
   launch?: (state: VkBrowserState) => Promise<BrowserSession>;
   timeout?: number;
-}): Promise<{ token: string; state: VkBrowserState } | undefined> {
+}): Promise<{ token: string; state: VkBrowserState }> {
   options.signal.throwIfAborted();
   const timeout = options.timeout ?? 25_000;
   const budget = AbortSignal.timeout(timeout);
@@ -347,7 +348,10 @@ export async function restoreVkSession(options: {
       const location = new URL(page.url());
       if (!isVkHost(location.hostname)) {
         options.onFailure?.("left_vk");
-        return;
+        throw new AdapterError(
+          "PROVIDER_ERROR",
+          "VK перенаправил восстановление за пределы сайта.",
+        );
       }
       for (const token of candidates) {
         signal.throwIfAborted();
@@ -358,14 +362,29 @@ export async function restoreVkSession(options: {
           return { token, state: await captureState(context) };
         }
       }
+      if (await qrOnPage(page)) {
+        signal.throwIfAborted();
+        if (!candidates.size) {
+          options.onFailure?.("login_qr");
+          throw new AdapterError(
+            "AUTH_REQUIRED",
+            "VK запросил новый вход. Авторизуйтесь по QR-коду.",
+          );
+        }
+      }
       await delay(200, undefined, { signal });
     }
     options.signal.throwIfAborted();
   } catch (error) {
-    if (!budget.aborted || options.signal.aborted) throw error;
+    options.signal.throwIfAborted();
+    if (!budget.aborted && !(error instanceof errors.TimeoutError)) throw error;
   } finally {
     signal.removeEventListener("abort", abort);
     await browser.close().catch(() => undefined);
   }
   options.onFailure?.("timeout");
+  throw new AdapterError(
+    "PROVIDER_ERROR",
+    "Истекло время восстановления сессии VK.",
+  );
 }
